@@ -33,7 +33,7 @@ Use the `-cuda` build only if you are on Linux, or have an NVIDIA GPU and prefer
 1. Download the mod jar from [Releases](https://github.com/xandergos/terrain-diffusion-mc/releases) for your Minecraft version and place it in your Minecraft `mods/` folder. Make sure the Minecraft version matches.
 2. Launch Minecraft, at least once online to download the models (~2.5GB).
 3. Create a world, and select the **Terrain Diffusion** world type. Click **Customize** to set the `World Scale` (see [Per-world settings](#per-world-settings) below).
-4. You may spawn in ocean. This is not a bug, the world just has a lot of water. Use `/td-explore` (see below) to find land.
+4. The mod will search for a land spawn point near the world origin automatically. If the area around (0, 0) is entirely ocean, it may take a moment to find land. Use `/td-explore` (see below) to scout the world further.
 
 ## Exploring the World
 
@@ -65,6 +65,12 @@ validate_model=true
 
 # Port for the local terrain explorer web UI (/td-explore).
 explorer.port=19801
+
+# Spawn search: coarse-pixel region sizes for finding a land spawn near (0, 0).
+# Starts at initial_size x initial_size and expands by 8 each step up to max_size x max_size.
+# Each coarse pixel covers a large area (hundreds of blocks), so 16–128 is typically sufficient.
+spawn_search.initial_size=16
+spawn_search.max_size=128
 ```
 
 ### Per-world settings
