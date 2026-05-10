@@ -1,0 +1,82 @@
+plugins {
+    id 'multiloader-common'
+    id 'fabric-loom'
+}
+
+repositories {
+    maven { name = 'TerrainDiffusionLocalDml'; url = uri(rootProject.ext.terrainDiffusionLocalDmlMavenUrl()) }
+    mavenCentral()
+    maven { name = 'ParchmentMC'; url = uri('https://maven.parchmentmc.org') }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    mappings loom.layered {
+        officialMojangMappings()
+        parchment("org.parchmentmc.data:parchment-${parchment_minecraft}:${parchment_version}@zip")
+    }
+
+    compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
+    compileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
+    annotationProcessor group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
+
+    compileOnly "com.microsoft.onnxruntime:onnxruntime:${rootProject.ext.terrainDiffusionOnnxRuntimeVersion}"
+    compileOnly "com.microsoft.onnxruntime:onnxruntime_gpu:${rootProject.ext.terrainDiffusionOnnxRuntimeVersion}"
+    compileOnly rootProject.ext.terrainDiffusionOnnxNotation('windows')
+}
+
+sourceSets {
+    main {
+        java {
+            exclude 'com/github/xandergos/terraindiffusionmc/client/**'
+            exclude 'com/github/xandergos/terraindiffusionmc/mixin/client/**'
+        }
+    }
+    client {
+        java.srcDir 'src/client/java'
+        resources.srcDir 'src/client/resources'
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += output + compileClasspath
+    }
+}
+
+configurations {
+    commonJava {
+        canBeResolved = false
+        canBeConsumed = true
+    }
+    commonClientJava {
+        canBeResolved = false
+        canBeConsumed = true
+    }
+    commonResources {
+        canBeResolved = false
+        canBeConsumed = true
+    }
+}
+
+artifacts {
+    commonJava sourceSets.main.java.sourceDirectories.singleFile
+    commonClientJava sourceSets.client.java.sourceDirectories.singleFile
+    commonResources sourceSets.main.resources.sourceDirectories.singleFile
+}
+
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements', 'namedElements'].each { variant ->
+    if (configurations.findByName(variant) != null) {
+        configurations.named(variant) {
+            attributes {
+                attribute(loaderAttribute, 'common')
+            }
+        }
+    }
+}
+sourceSets.configureEach {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant ->
+        configurations.named(variant) {
+            attributes {
+                attribute(loaderAttribute, 'common')
+            }
+        }
+    }
+}
