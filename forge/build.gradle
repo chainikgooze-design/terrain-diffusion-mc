@@ -1,106 +1,78 @@
 plugins {
     id 'multiloader-loader'
-    id 'net.minecraftforge.gradle'
-    id 'org.spongepowered.mixin'
-    id 'idea'
+    id 'net.neoforged.moddev.legacyforge'
 }
 
 mixin {
     add(sourceSets.main, "${mod_id}.refmap.json")
+
     config("${mod_id}.mixins.json")
     config("${mod_id}.client.mixins.json")
     config("${mod_id}.forge.mixins.json")
 }
 
-jar {
-    manifest {
-        attributes([
-                'MixinConfigs': "${mod_id}.mixins.json,${mod_id}.client.mixins.json,${mod_id}.forge.mixins.json"
-        ])
+legacyForge {
+    version = "${minecraft_version}-${forge_version}"
+
+    validateAccessTransformers = true
+
+    def at = project(':common').file('src/main/resources/META-INF/accesstransformer.cfg')
+    if (at.exists()) {
+        accessTransformers = [at.absolutePath]
     }
-}
-
-minecraft {
-    mappings channel: 'official', version: minecraft_version
-    copyIdeResources = true
-
-    def commonAt = project(':common').file('src/main/resources/META-INF/accesstransformer.cfg')
-    def forgeAt = file('src/main/resources/META-INF/accesstransformer.cfg')
-    if (forgeAt.exists()) {
-        accessTransformer = forgeAt
-    } else if (commonAt.exists()) {
-        accessTransformer = commonAt
+    parchment {
+        minecraftVersion = parchment_minecraft
+        mappingsVersion = parchment_version
     }
-
     runs {
         client {
-            workingDirectory file('runs/client')
-            ideaModule "${rootProject.name}.${project.name}.main"
-            taskName 'Client'
-            property 'mixin.env.remapRefMap', 'true'
-            property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
-            mods {
-                "${fml_mod_id}" {
-                    source sourceSets.main
-                }
-            }
+            client()
         }
-
-        server {
-            workingDirectory file('runs/server')
-            ideaModule "${rootProject.name}.${project.name}.main"
-            taskName 'Server'
-            property 'mixin.env.remapRefMap', 'true'
-            property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
-            mods {
-                "${fml_mod_id}" {
-                    source sourceSets.main
-                }
-            }
-        }
-
         data {
-            workingDirectory file('runs/data')
-            ideaModule "${rootProject.name}.${project.name}.main"
-            args '--mod', fml_mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
-            taskName 'Data'
-            mods {
-                "${fml_mod_id}" {
-                    source sourceSets.main
-                }
-            }
+            data()
+            programArguments.addAll '--mod', fml_mod_id, '--all', '--output', file('src/generated/resources/').absolutePath, '--existing', file('src/main/resources/').absolutePath
+        }
+        server {
+            server()
+        }
+    }
+
+    mods {
+        "${fml_mod_id}" {
+            sourceSet sourceSets.main
         }
     }
 }
 
 sourceSets.main.resources.srcDir 'src/generated/resources'
 
+def terrainDiffusionForgeBuildVariant = rootProject.ext.terrainDiffusionBuildVariant(project)
+def terrainDiffusionForgeOnnxNotation = rootProject.ext.terrainDiffusionOnnxNotation(terrainDiffusionForgeBuildVariant)
+
 dependencies {
-    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
-    annotationProcessor("org.spongepowered:mixin:0.8.5-SNAPSHOT:processor")
+    annotationProcessor('org.spongepowered:mixin:0.8.5-SNAPSHOT:processor')
+
+    // Required by ModDevGradle/Forge 1.20.1 runs for external Java libraries.
+    // Without this, ModLauncher does not expose ai.onnxruntime.* at runtime.
+    additionalRuntimeClasspath terrainDiffusionForgeOnnxNotation
+
+    jarJar(implementation(terrainDiffusionForgeOnnxNotation))
 }
 
-publishing {
-    publications {
-        named('mavenJava', MavenPublication) {
-            fg.component(it)
-        }
-    }
+tasks.named('build') {
+    dependsOn tasks.named('jarJar')
 }
 
-sourceSets.each {
-    def dir = layout.buildDirectory.dir("sourcesSets/$it.name")
-    it.output.resourcesDir = dir
-    it.java.destinationDirectory = dir
-}
-
-tasks.withType(JavaExec).configureEach {
-    systemProperty 'log4j2.configurationFile', rootProject.file('log4j2-dev.xml').absolutePath
+jar {
+    finalizedBy('reobfJar')
+    manifest.attributes([
+            'MixinConfigs': "${mod_id}.mixins.json,${mod_id}.client.mixins.json,${mod_id}.forge.mixins.json"
+    ])
 }
 
 def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
 ['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements'].each { variant ->
-    configurations.named(variant) {
+    configurations.named("$variant") {
         attributes {
             attribute(loaderAttribute, 'forge')
         }
@@ -108,7 +80,7 @@ def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', Strin
 }
 sourceSets.configureEach {
     [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant ->
-        configurations.named(variant) {
+        configurations.named("$variant") {
             attributes {
                 attribute(loaderAttribute, 'forge')
             }

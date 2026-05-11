@@ -10,6 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(Biome.class)
 public abstract class BiomeMixin {
+
     @Shadow
     public abstract float getBaseTemperature();
 
@@ -17,18 +18,17 @@ public abstract class BiomeMixin {
     public abstract boolean hasPrecipitation();
 
     @Inject(method = "getPrecipitationAt", at = @At("HEAD"), cancellable = true)
-    private void terrainDiffusionMc$overridePrecipitation(BlockPos pos, CallbackInfoReturnable<Biome.Precipitation> cir) {
+    private void preventHighAltitudeSnow(BlockPos pos, CallbackInfoReturnable<Biome.Precipitation> cir) {
         if (!this.hasPrecipitation()) {
             cir.setReturnValue(Biome.Precipitation.NONE);
             return;
         }
 
-        // In 1.20.1, keep this mixin independent from LocalTerrainProvider.
-        // The 1.21.x biome-id lookup path relied on provider helpers that are not
-        // present in this backport. This still prevents vanilla altitude snow in
-        // non-snowy Terrain Diffusion biomes.
+        // Base temperature >= 0.15 means this is NOT a snowy biome.
+        // Always return RAIN to prevent altitude-based snow in non-snowy biomes.
         if (this.getBaseTemperature() >= 0.15F) {
             cir.setReturnValue(Biome.Precipitation.RAIN);
         }
+        // For snowy biomes (base temp < 0.15), let vanilla handle it
     }
 }

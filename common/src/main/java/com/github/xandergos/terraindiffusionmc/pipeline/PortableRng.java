@@ -14,7 +14,7 @@ public final class PortableRng {
 
     /**
      * Portable 64-bit seed from (base_seed, ty, tx). Matches world_pipeline._tile_seed.
-     * Uses full 64-bit base seed (Python: seed & 0xFFFFFFFFFFFFFFFF).
+     * Uses full 64-bit base seed (Python: {@code seed & 0xFFFFFFFFFFFFFFFF}).
      */
     public static long tileSeed(long baseSeed, int ty, int tx) {
         long h = (baseSeed & MASK64) * 0x9E3779B9L;
@@ -24,7 +24,7 @@ public final class PortableRng {
     }
 
     /**
-     * One PCG64 step: (state * MULT + INC) & MASK64, output 32-bit XSH-RR.
+     * One PCG64 step: {@code (state * MULT + INC) & MASK64}, output 32-bit XSH-RR.
      * Returns { newState (64-bit), output32 (unsigned 32-bit as long) }.
      */
     public static long[] pcg64Next(long state) {

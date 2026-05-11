@@ -29,7 +29,6 @@ public abstract class CreateWorldScreenWorldTabMixin {
     @Unique
     private CreateWorldScreen terrainDiffusionMc$createWorldScreen;
 
-    @Unique
     private static final ResourceKey<WorldPreset> TERRAIN_DIFFUSION_PRESET_KEY =
             ResourceKey.create(Registries.WORLD_PRESET, new ResourceLocation("terrain-diffusion-mc", "terrain_diffusion"));
 
@@ -42,14 +41,14 @@ public abstract class CreateWorldScreenWorldTabMixin {
 
     @Unique
     private void terrainDiffusionMc$refreshCustomizeButton() {
-        if (terrainDiffusionMc$isTerrainDiffusionWorldTypeSelected()) {
+        if (isTerrainDiffusionWorldTypeSelected()) {
             this.customizeTypeButton.active = true;
         }
     }
 
     @Inject(method = "openPresetEditor", at = @At("HEAD"), cancellable = true)
     private void terrainDiffusionMc$openTerrainScaleScreen(CallbackInfo callbackInfo) {
-        if (!terrainDiffusionMc$isTerrainDiffusionWorldTypeSelected()) {
+        if (!isTerrainDiffusionWorldTypeSelected()) {
             return;
         }
         Minecraft minecraftClient = Minecraft.getInstance();
@@ -59,8 +58,7 @@ public abstract class CreateWorldScreenWorldTabMixin {
         }
     }
 
-    @Unique
-    private boolean terrainDiffusionMc$isTerrainDiffusionWorldTypeSelected() {
+    private boolean isTerrainDiffusionWorldTypeSelected() {
         if (terrainDiffusionMc$createWorldScreen == null) {
             return false;
         }

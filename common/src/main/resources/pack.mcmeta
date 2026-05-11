@@ -1,6 +1,8 @@
 {
   "pack": {
-    "description": "terrain-diffusion-mc resources",
-    "pack_format": 15
+    "pack_format": 15,
+    "description": {
+      "text": "Terrain Diffusion MC resources"
+    }
   }
 }

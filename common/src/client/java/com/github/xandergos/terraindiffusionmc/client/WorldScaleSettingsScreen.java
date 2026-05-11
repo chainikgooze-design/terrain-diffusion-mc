@@ -2,15 +2,33 @@ package com.github.xandergos.terraindiffusionmc.client;
 
 import com.github.xandergos.terraindiffusionmc.world.WorldScaleManager;
 import com.github.xandergos.terraindiffusionmc.world.WorldScaleSelectionState;
+import com.mojang.serialization.Lifecycle;
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.StringWidget;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
+import net.minecraft.core.Holder;
+import net.minecraft.core.HolderGetter;
+import net.minecraft.core.MappedRegistry;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.dimension.DimensionType;
+import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.levelgen.WorldDimensions;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/**
+ * World creation settings screen for selecting the initial terrain scale of a world.
+ */
 public final class WorldScaleSettingsScreen extends Screen {
     private static final String MOD_ID = "terrain-diffusion-mc";
     private static final int TEXT_FIELD_WIDTH = 80;
@@ -38,6 +56,7 @@ public final class WorldScaleSettingsScreen extends Screen {
         int centerY = this.height / 2;
 
         addCenteredTextWidget(this.title, centerX, 20, 0xFFFFFF);
+
         addCenteredTextWidget(DESCRIPTION_TEXT, centerX, centerY - 34, 0xAAAAAA);
         addCenteredTextWidget(LABEL_TEXT, centerX, centerY - 22, 0xFFFFFF);
 
@@ -61,6 +80,9 @@ public final class WorldScaleSettingsScreen extends Screen {
         this.addRenderableWidget(validationTextWidget);
     }
 
+    /**
+     * Adds a centered StringWidget at the given screen-center x and y position.
+     */
     private void addCenteredTextWidget(Component text, int centerX, int y, int color) {
         int textWidth = this.font.width(text);
         MutableComponent coloredText = text.copy().withStyle(style -> style.withColor(color));
@@ -69,9 +91,9 @@ public final class WorldScaleSettingsScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        this.renderBackground(context);
-        super.render(context, mouseX, mouseY, delta);
+    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        this.renderBackground(guiGraphics);
+        super.render(guiGraphics, mouseX, mouseY, partialTick);
     }
 
     @Override
@@ -81,6 +103,9 @@ public final class WorldScaleSettingsScreen extends Screen {
         }
     }
 
+    /**
+     * Parses and validates the chosen scale, then stores it as a pending world-creation value.
+     */
     private void onDonePressed() {
         String rawScaleValue = scaleTextField.getValue().trim();
         if (rawScaleValue.isEmpty()) {
@@ -93,10 +118,63 @@ public final class WorldScaleSettingsScreen extends Screen {
                 validationTextWidget.setMessage(ERROR_TEXT);
                 return;
             }
+            applyWorldHeightForScale(selectedScale);
             WorldScaleSelectionState.setPendingScale(selectedScale);
             onClose();
         } catch (NumberFormatException exception) {
             validationTextWidget.setMessage(ERROR_TEXT);
         }
+    }
+
+    /**
+     * Applies a pre-registered dimension type variant for the chosen scale.
+     */
+    private void applyWorldHeightForScale(int selectedScale) {
+        if (!(parentScreen instanceof CreateWorldScreen createWorldScreen)) {
+            return;
+        }
+
+        createWorldScreen.getUiState().updateDimensions((registryManager, selectedDimensions) -> {
+            WorldDimensions updatedDimensions = updateOverworldDimensionType(
+                    registryManager.lookupOrThrow(Registries.DIMENSION_TYPE),
+                    selectedDimensions,
+                    selectedScale);
+            return updatedDimensions == null ? selectedDimensions : updatedDimensions;
+        });
+    }
+
+    /**
+     * Replaces only the overworld dimension type entry with the scale-specific pre-registered one.
+     */
+    private WorldDimensions updateOverworldDimensionType(
+            HolderGetter<DimensionType> dimensionTypeRegistry,
+            WorldDimensions selectedDimensions,
+            int selectedScale
+    ) {
+        LevelStem overworldOptions = selectedDimensions.get(LevelStem.OVERWORLD).orElse(null);
+        if (overworldOptions == null) {
+            return null;
+        }
+
+        ResourceKey<DimensionType> dimensionTypeKey = ResourceKey.create(
+                Registries.DIMENSION_TYPE,
+                new ResourceLocation(MOD_ID, "terrain_diffusion_scale_" + selectedScale));
+        Holder.Reference<DimensionType> selectedDimensionTypeEntry = dimensionTypeRegistry.get(dimensionTypeKey).orElse(null);
+        if (selectedDimensionTypeEntry == null) {
+            return null;
+        }
+
+        LevelStem updatedOverworldOptions = new LevelStem(
+                selectedDimensionTypeEntry,
+                overworldOptions.generator()
+        );
+
+        Map<ResourceKey<LevelStem>, LevelStem> updatedDimensionMap = new LinkedHashMap<>();
+        selectedDimensions.dimensions().entrySet().forEach(entry -> updatedDimensionMap.put(entry.getKey(), entry.getValue()));
+        updatedDimensionMap.put(LevelStem.OVERWORLD, updatedOverworldOptions);
+
+        MappedRegistry<LevelStem> updatedRegistry = new MappedRegistry<>(Registries.LEVEL_STEM, Lifecycle.stable(), false);
+        updatedDimensionMap.forEach((key, value) -> Registry.register(updatedRegistry, key, value));
+        return new WorldDimensions(updatedRegistry);
     }
 }

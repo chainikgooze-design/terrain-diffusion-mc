@@ -3,10 +3,10 @@ package com.github.xandergos.terraindiffusionmc.infinitetensor;
 /**
  * Defines the sliding window layout for an InfiniteTensor.
  *
- * For window index w[], the covered pixel range in dimension d is:
- *   [w[d] * stride[d] + offset[d],  w[d] * stride[d] + offset[d] + size[d])
+ * For window index {@code w[]}, the covered pixel range in dimension {@code d} is:
+ * {@code [w[d] * stride[d] + offset[d], w[d] * stride[d] + offset[d] + size[d])}
  *
- * Windows may overlap (stride < size) or have gaps (stride > size).
+ * Windows may overlap ({@code stride < size}) or have gaps ({@code stride > size}).
  * Overlapping windows are summed during slice accumulation.
  */
 public class TensorWindow {
@@ -56,8 +56,8 @@ public class TensorWindow {
      * Returns the lowest window index (per dimension) whose bounds overlap the pixel range.
      * pixelRange[d] = {start, stop}.
      *
-     * Solves: pixelRange[d].start < w * stride + offset + size
-     * i.e. w > (p - offset - size) / stride
+     * Solves: {@code pixelRange[d].start < w * stride + offset + size}
+     * i.e. {@code w > (p - offset - size) / stride}
      */
     public int[] getLowestIntersection(int[][] pixelRange) {
         int n = size.length;
@@ -80,8 +80,8 @@ public class TensorWindow {
      * Returns the highest window index (per dimension) whose bounds overlap the pixel range.
      * pixelRange[d] = {start, stop}.
      *
-     * Solves: w * stride + offset <= pixelRange[d].stop - 1
-     * i.e. w <= (p - offset) / stride  (floor division)
+     * Solves: {@code w * stride + offset <= pixelRange[d].stop - 1}
+     * i.e. {@code w <= (p - offset) / stride} (floor division)
      */
     public int[] getHighestIntersection(int[][] pixelRange) {
         int n = size.length;

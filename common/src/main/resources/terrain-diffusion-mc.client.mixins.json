@@ -2,10 +2,13 @@
   "required": true,
   "minVersion": "0.8",
   "package": "com.github.xandergos.terraindiffusionmc.mixin.client",
+  "refmap": "${mod_id}.refmap.json",
   "compatibilityLevel": "JAVA_17",
+  "mixins": [],
   "client": [
     "CreateWorldScreenWorldTabMixin"
   ],
+  "server": [],
   "injectors": {
     "defaultRequire": 1
   },

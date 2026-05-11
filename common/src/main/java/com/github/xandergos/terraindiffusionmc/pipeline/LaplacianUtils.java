@@ -12,7 +12,7 @@ public final class LaplacianUtils {
      * laplacian_decode: upsample lowres to residual size (bilinear) and add residual.
      *
      * @param residual 2D array (H, W)
-     * @param lowres   2D array (h, w) where h <= H
+     * @param lowres   2D array (h, w) where {@code h <= H}
      * @return decoded array (H, W) = residual + bilinear_upsample(lowres, H, W)
      */
     public static float[][] laplacianDecode(float[][] residual, float[][] lowres) {

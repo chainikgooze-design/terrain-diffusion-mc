@@ -87,33 +87,24 @@ jar {
 }
 
 processResources {
-    def terrainDiffusionResolvedBuildVariant =
-            project.extensions.extraProperties.has('terrainDiffusionBuildVariant')
-                    ? project.ext.terrainDiffusionBuildVariant
-                    : (rootProject.extensions.extraProperties.has('terrainDiffusionBuildVariant')
-                    ? rootProject.ext.terrainDiffusionBuildVariant(project)
-                    : 'windows')
-
     var expandProps = [
-            'mod_version'              : version,
-            'version'                  : version,
-            'group'                    : project.group,
-            'minecraft_version'        : minecraft_version,
-            'minecraft_version_range'  : minecraft_version_range,
-            'fabric_version'           : fabric_version,
-            'fabric_loader_version'    : fabric_loader_version,
-            'loader_version'           : fabric_loader_version,
-            'build_variant'            : terrainDiffusionResolvedBuildVariant,
-            'mod_name'                 : mod_name,
-            'mod_author'               : mod_author,
-            'mod_id'                   : mod_id,
-            'fml_mod_id'               : findProperty('fml_mod_id') ?: mod_id.replace('-', '_'),
-            'license'                  : license,
-            'description'              : project.description,
-            'forge_version'            : forge_version,
+            'version'                   : version,
+            'group'                     : project.group,
+            'minecraft_version'         : minecraft_version,
+            'minecraft_version_range'   : minecraft_version_range,
+            'fabric_version'            : fabric_version,
+            'fabric_loader_version'     : fabric_loader_version,
+            'loader_version'            : fabric_loader_version,
+            'mod_name'                  : mod_name,
+            'mod_author'                : mod_author,
+            'mod_id'                    : mod_id,
+            'fml_mod_id'                : findProperty('fml_mod_id') ?: mod_id.replace('-', '_'),
+            'license'                   : license,
+            'description'               : project.description,
+            'forge_version'             : forge_version,
             'forge_loader_version_range': forge_loader_version_range,
-            'credits'                  : credits,
-            'java_version'             : java_version
+            'credits'                   : credits,
+            'java_version'              : java_version
     ]
 
     var jsonExpandProps = expandProps.collectEntries {
@@ -134,13 +125,13 @@ processResources {
 publishing {
     publications {
         register('mavenJava', MavenPublication) {
-            artifactId base.archivesName.get()
+            artifactId = base.archivesName.get()
             from components.java
         }
     }
     repositories {
         maven {
-            url System.getenv('local_maven_url')
+            url = System.getenv('local_maven_url')
         }
     }
 }

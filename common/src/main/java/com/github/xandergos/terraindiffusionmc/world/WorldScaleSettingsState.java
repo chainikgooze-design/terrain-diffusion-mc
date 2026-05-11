@@ -1,20 +1,15 @@
 package com.github.xandergos.terraindiffusionmc.world;
 
-import com.mojang.serialization.Codec;
-import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.NbtOps;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
 
+/**
+ * Persisted per-world settings for terrain diffusion.
+ *
+ * <p>This is stored in the world save via Minecraft's persistent state manager.
+ */
 public final class WorldScaleSettingsState extends SavedData {
-
-    private static final Codec<WorldScaleSettingsState> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-            Codec.INT.optionalFieldOf("scale", WorldScaleManager.DEFAULT_SCALE)
-                    .forGetter(WorldScaleSettingsState::getScale),
-            Codec.BOOL.optionalFieldOf("explicit_scale", false)
-                    .forGetter(WorldScaleSettingsState::hasExplicitScale)
-    ).apply(instance, WorldScaleSettingsState::new));
+    public static final String DATA_NAME = "terrain_diffusion_world_settings";
 
     private int scale;
     private boolean explicitScale;
@@ -24,44 +19,46 @@ public final class WorldScaleSettingsState extends SavedData {
         this.explicitScale = hasExplicitScale;
     }
 
-    public WorldScaleSettingsState() {
-        this(WorldScaleManager.DEFAULT_SCALE, false);
-    }
-
+    /**
+     * Creates a default state for worlds that do not yet have saved terrain diffusion settings.
+     */
     public static WorldScaleSettingsState createDefault() {
         return new WorldScaleSettingsState(WorldScaleManager.DEFAULT_SCALE, false);
     }
 
-    public static WorldScaleSettingsState get(ServerLevel world) {
-        return world.getDataStorage().computeIfAbsent(
-                WorldScaleSettingsState::fromNbt,
-                WorldScaleSettingsState::new,
-                "world_scale_settings"
-        );
-    }
-
-    public static WorldScaleSettingsState fromNbt(CompoundTag nbt) {
-        return CODEC.parse(NbtOps.INSTANCE, nbt)
-                .result()
-                .orElseGet(WorldScaleSettingsState::createDefault);
+    /**
+     * Loads the persisted state from Minecraft 1.20.1 NBT storage.
+     */
+    public static WorldScaleSettingsState load(CompoundTag tag) {
+        int configuredScale = tag.contains("scale") ? tag.getInt("scale") : WorldScaleManager.DEFAULT_SCALE;
+        boolean hasExplicitScale = tag.contains("explicit_scale") && tag.getBoolean("explicit_scale");
+        return new WorldScaleSettingsState(configuredScale, hasExplicitScale);
     }
 
     @Override
-    public CompoundTag save(CompoundTag nbt) {
-        CODEC.encodeStart(NbtOps.INSTANCE, this)
-                .result()
-                .ifPresent(encoded -> nbt.merge((CompoundTag) encoded));
-        return nbt;
+    public CompoundTag save(CompoundTag tag) {
+        tag.putInt("scale", scale);
+        tag.putBoolean("explicit_scale", explicitScale);
+        return tag;
     }
 
+    /**
+     * Returns the currently persisted world scale.
+     */
     public int getScale() {
         return scale;
     }
 
+    /**
+     * Returns whether this world has an explicitly chosen scale.
+     */
     public boolean hasExplicitScale() {
         return explicitScale;
     }
 
+    /**
+     * Applies a new persisted world scale and marks the state dirty.
+     */
     public void setScale(int configuredScale) {
         this.scale = WorldScaleManager.clampScale(configuredScale);
         this.explicitScale = true;

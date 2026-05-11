@@ -45,6 +45,8 @@ loom {
 sourceSets {
     main {
         java {
+            // Guard against stale files left by extracting older migration zips over the same working tree.
+            // Fabric's main source set cannot compile net.minecraft.client classes when splitEnvironmentSourceSets() is enabled.
             exclude 'com/github/xandergos/terraindiffusionmc/client/**'
             exclude 'com/github/xandergos/terraindiffusionmc/mixin/client/**'
         }
@@ -76,16 +78,14 @@ processResources {
     inputs.property 'minecraft_version', project.minecraft_version
     inputs.property 'loader_version', project.fabric_loader_version
     inputs.property 'build_variant', buildVariant
-    filteringCharset 'UTF-8'
-}
-
-jar {
-    def licenseFile = rootProject.file('LICENSE.txt')
-    if (!licenseFile.exists()) licenseFile = rootProject.file('LICENSE')
-    if (licenseFile.exists()) {
-        from(licenseFile) {
-            rename { "${it}_${project.archivesBaseName}" }
-        }
+    filteringCharset = 'UTF-8'
+    filesMatching('fabric.mod.json') {
+        expand 'version': project.version,
+                'minecraft_version': project.minecraft_version,
+                'loader_version': project.fabric_loader_version
+    }
+    filesMatching('build-variant.properties') {
+        expand 'build_variant': buildVariant
     }
 }
 
@@ -110,19 +110,18 @@ tasks.register('pipelineTest', JavaExec) {
     jvmArgs '-Xmx8g'
 }
 
+// Implement mcgradleconventions loader attribute
 def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
 ['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements', 'includeInternal', 'modCompileClasspath'].each { variant ->
-    if (configurations.findByName(variant) != null) {
-        configurations.named(variant) {
-            attributes {
-                attribute(loaderAttribute, 'fabric')
-            }
+    configurations.named("$variant") {
+        attributes {
+            attribute(loaderAttribute, 'fabric')
         }
     }
 }
 sourceSets.configureEach {
-    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant ->
-        configurations.named(variant) {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant->
+        configurations.named("$variant") {
             attributes {
                 attribute(loaderAttribute, 'fabric')
             }

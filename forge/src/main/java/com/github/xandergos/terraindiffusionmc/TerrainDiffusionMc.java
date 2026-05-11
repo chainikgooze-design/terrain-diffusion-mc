@@ -23,10 +23,8 @@ public class TerrainDiffusionMc {
 
     public TerrainDiffusionMc() {
         LOG.info("Initializing terrain-diffusion-mc for Forge");
-
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
         modEventBus.addListener(this::onRegister);
-
         TerrainDiffusionLifecycle.bootstrap(FMLPaths.CONFIGDIR.get(), FMLPaths.GAMEDIR.get());
 
         MinecraftForge.EVENT_BUS.addListener(this::onServerStarting);

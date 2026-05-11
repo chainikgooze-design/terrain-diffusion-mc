@@ -1,8 +1,6 @@
 plugins {
-    // 1.9-SNAPSHOT is the safer line for a Java 17 / Minecraft 1.20.1 workspace.
     id 'fabric-loom' version '1.9-SNAPSHOT' apply false
-    id 'net.minecraftforge.gradle' version '[6.0.46,6.2)' apply false
-    id 'org.spongepowered.mixin' version '0.7-SNAPSHOT' apply false
+    id 'net.neoforged.moddev.legacyforge' version '2.0.77' apply false
 }
 
 ext {
@@ -184,32 +182,4 @@ subprojects { subproject ->
         }
     }
 
-    subproject.plugins.withId('net.minecraftforge.gradle') {
-        def forgeJarJar = subproject.extensions.getByName('jarJar')
-        forgeJarJar.enable()
-
-        subproject.dependencies {
-            String buildVariant = subproject.ext.terrainDiffusionBuildVariant
-            def onnxModule = rootProject.ext.terrainDiffusionOnnxModule(buildVariant)
-
-            // Forge dev runtime classpath; jarJar below is for the production artifact.
-            if (subproject.configurations.findByName('minecraftLibrary') != null) {
-                minecraftLibrary "${onnxModule.group}:${onnxModule.name}:${onnxModule.version}"
-            }
-
-            jarJar(group: onnxModule.group, name: onnxModule.name, version: "[${onnxModule.version}]") {
-                forgeJarJar.pin(it, onnxModule.version)
-            }
-        }
-
-        subproject.tasks.named('jar') {
-            finalizedBy 'reobfJar'
-        }
-        subproject.tasks.matching { it.name == 'jarJar' }.configureEach {
-            finalizedBy 'reobfJarJar'
-        }
-        subproject.tasks.named('build') {
-            dependsOn 'jarJar'
-        }
-    }
 }

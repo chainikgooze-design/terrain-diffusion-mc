@@ -1,26 +1,36 @@
 {
   "schemaVersion": 1,
-  "id": "${mod_id}",
-  "version": "${mod_version}-${build_variant}+${minecraft_version}",
-  "name": "${mod_name}",
-  "description": "${description}",
-  "authors": ["${mod_author}"],
+  "id": "terrain-diffusion-mc",
+  "version": "${version}",
+  "name": "terrain-diffusion-mc",
+  "description": "Terrain Diffusion in Minecraft",
+  "authors": [],
   "contact": {},
-  "license": "${license}",
+  "license": "MIT",
+  "icon": "assets/terrain-diffusion-mc/icon.png",
   "environment": "*",
   "entrypoints": {
-    "main": ["com.github.xandergos.terraindiffusionmc.TerrainDiffusionMc"],
-    "client": ["com.github.xandergos.terraindiffusionmc.client.TerrainDiffusionMcClient"],
-    "fabric-datagen": ["com.github.xandergos.terraindiffusionmc.client.TerrainDiffusionMcDataGenerator"]
+    "fabric-datagen": [
+      "com.github.xandergos.terraindiffusionmc.client.TerrainDiffusionMcDataGenerator"
+    ],
+    "client": [
+      "com.github.xandergos.terraindiffusionmc.client.TerrainDiffusionMcClient"
+    ],
+    "main": [
+      "com.github.xandergos.terraindiffusionmc.TerrainDiffusionMc"
+    ]
   },
   "mixins": [
     "terrain-diffusion-mc.mixins.json",
-    "terrain-diffusion-mc.client.mixins.json"
+    {
+      "config": "terrain-diffusion-mc.client.mixins.json",
+      "environment": "client"
+    }
   ],
   "depends": {
-    "fabricloader": ">=${fabric_loader_version}",
+    "fabricloader": ">=${loader_version}",
+    "fabric": "*",
     "minecraft": "${minecraft_version}",
-    "java": ">=${java_version}",
-    "fabric-api": "${fabric_version}"
+    "java": ">=17"
   }
 }

@@ -11,7 +11,6 @@ import com.github.xandergos.terraindiffusionmc.world.WorldScaleManager;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.serialization.Codec;
-import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.ClickEvent;
@@ -60,6 +59,7 @@ public final class TerrainDiffusionLifecycle {
         PipelineModels.load();
     }
 
+
     /**
      * Registers the common biome source codec through the active loader's registry hook.
      */
@@ -71,7 +71,7 @@ public final class TerrainDiffusionLifecycle {
      * Registers the common density function codec through the active loader's registry hook.
      */
     public static void registerDensityFunctionCodecs(CodecRegistrar<Codec<? extends DensityFunction>> registrar) {
-        registrar.register(TERRAIN_DIFFUSION_ID, TerrainDiffusionDensityFunction.CODEC);
+        registrar.register(TERRAIN_DIFFUSION_ID, TerrainDiffusionDensityFunction.CODEC_HOLDER.codec());
     }
 
     @FunctionalInterface
@@ -115,9 +115,8 @@ public final class TerrainDiffusionLifecycle {
             int port = ExplorerServer.startIfNotRunning();
             String url = "http://localhost:" + port;
             MutableComponent link = Component.literal(url)
-                    .withStyle(style -> style.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, url))
-                            .withUnderlined(true)
-                            .withColor(ChatFormatting.AQUA));
+                    .withStyle(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, url))
+                            .withUnderlined(true));
             ctx.getSource().sendSuccess(
                     () -> Component.literal("Terrain Explorer: ").append(link),
                     false);

@@ -78,7 +78,10 @@ public final class WorldPipeline implements AutoCloseable {
     final InfiniteTensor latents;
     final InfiniteTensor residual;
 
-    /** Uses shared models from PipelineModels (e.g. from mod init). Does not close models on close(). Seed is 64-bit (Python: seed & 0xFFFFFFFFFFFFFFFF). */
+    /**
+     * Uses shared models from PipelineModels (e.g. from mod init).
+     * Does not close models on close(). Seed is 64-bit (Python: {@code seed & 0xFFFFFFFFFFFFFFFF}).
+     */
     public WorldPipeline(long seed, PipelineModels models) {
         this.seed = seed & 0xFFFFFFFFFFFFFFFFL;
         this.coarseModel = models.getCoarseModel();

@@ -8,15 +8,9 @@
   },
   "downfall": 0.4,
   "effects": {
-    "fog_color": 12638463,
-    "mood_sound": {
-      "block_search_extent": 8,
-      "offset": 2.0,
-      "sound": "minecraft:ambient.cave",
-      "tick_delay": 6000
-    },
-    "sky_color": 8625919,
     "water_color": 4020182,
+    "sky_color": 8625919,
+    "fog_color": 12638463,
     "water_fog_color": 329011
   },
   "features": [
@@ -72,7 +66,7 @@
     [
       "minecraft:glow_lichen",
       "minecraft:patch_large_fern",
-      "minecraft:trees_taiga",
+      "terrain-diffusion-mc:trees_taiga_sparse",
       "minecraft:flower_default",
       "minecraft:patch_grass_taiga_2",
       "minecraft:brown_mushroom_taiga",

@@ -6,6 +6,7 @@ import com.github.xandergos.terraindiffusionmc.pipeline.LocalTerrainProvider.Hei
 import com.mojang.datafixers.util.Pair;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderGetter;
@@ -32,12 +33,13 @@ public class TerrainDiffusionBiomeSource extends BiomeSource {
     private static final ResourceKey<Biome> TAIGA_SPARSE = ResourceKey.create(Registries.BIOME, new ResourceLocation("terrain-diffusion-mc", "taiga_sparse"));
     private static final ResourceKey<Biome> SNOWY_TAIGA_SPARSE = ResourceKey.create(Registries.BIOME, new ResourceLocation("terrain-diffusion-mc", "snowy_taiga_sparse"));
 
-    public static final Codec<TerrainDiffusionBiomeSource> CODEC = RecordCodecBuilder.create(instance ->
+    public static final Codec<TerrainDiffusionBiomeSource> CODEC = RecordCodecBuilder.create((instance) ->
             instance.group(
                     RegistryOps.retrieveGetter(Registries.BIOME)
             ).apply(instance, instance.stable(TerrainDiffusionBiomeSource::new)));
 
-    private final HolderGetter<Biome> biomeLookup;
+
+    private HolderGetter<Biome> biomeLookup;
     private Map<Short, Holder<Biome>> biomeIdMap = null;
 
     public TerrainDiffusionBiomeSource(HolderGetter<Biome> biomeLookup) {
@@ -90,6 +92,7 @@ public class TerrainDiffusionBiomeSource extends BiomeSource {
         requireBiomeIdMap();
         Holder<Biome> defaultEntry = biomeIdMap.get((short) 1);
 
+        // x, y, z are in quart coordinates (block / 4)
         int blockX = QuartPos.toBlock(x);
         int blockZ = QuartPos.toBlock(z);
 

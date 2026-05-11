@@ -44,7 +44,9 @@ public final class SyntheticMapFactory {
     private static float cachedTempStdP99;
     private static boolean dataLoaded = false;
 
-    /** @param worldSeed 64-bit world seed (Python: seed & 0xFFFFFFFFFFFFFFFF). Per-channel seeds use lower 32 bits. */
+    /**
+     * @param worldSeed 64-bit world seed (Python: {@code seed & 0xFFFFFFFFFFFFFFFF}). Per-channel seeds use lower 32 bits.
+     */
     public SyntheticMapFactory(long worldSeed) {
         loadDataIfNeeded();
         this.dataQuantiles = cachedDataQuantiles;
