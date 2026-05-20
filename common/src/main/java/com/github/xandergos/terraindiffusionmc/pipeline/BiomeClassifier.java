@@ -1,5 +1,10 @@
 package com.github.xandergos.terraindiffusionmc.pipeline;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 /**
  * Rule-based biome classifier port of _classify_biome in minecraft_api.py.
  *
@@ -39,6 +44,152 @@ public final class BiomeClassifier {
     static final short GROVE = 31, SNOWY_SLOPES = 32, FROZEN_PEAKS = 33, STONY_PEAKS = 35;
     static final short WARM_OCEAN = 41, OCEAN = 44, COLD_OCEAN = 46, FROZEN_OCEAN = 48;
     static final short FOREST_SPARSE = 108, TAIGA_SPARSE = 115, SNOWY_TAIGA_SPARSE = 116;
+
+    // --- Climate condition bits ---
+    // Terrain (mutually exclusive; ocean overrides lowland when elevVal < 0)
+    static final int BIT_OCEAN    = 1 << 0;
+    static final int BIT_LOWLAND  = 1 << 1;  // altM < 200, non-ocean
+    static final int BIT_MIDLAND  = 1 << 2;  // 200 <= altM < 2500, non-ocean
+    static final int BIT_MOUNTAIN = 1 << 3;  // altM >= 2500
+
+    // Temperature bands (mutually exclusive)
+    static final int BIT_FROZEN    = 1 << 4;  // temp < -5
+    static final int BIT_COLD      = 1 << 5;  // -5 <= temp < 5
+    static final int BIT_COOL      = 1 << 6;  // 5 <= temp < 12
+    static final int BIT_TEMPERATE = 1 << 7;  // 12 <= temp < 20
+    static final int BIT_WARM      = 1 << 8;  // 20 <= temp < 26
+    static final int BIT_HOT       = 1 << 9;  // temp >= 26
+
+    // Slope state (mutually exclusive)
+    static final int BIT_SLOPE_NONE   = 1 << 10;
+    static final int BIT_SLOPE_MEDIUM = 1 << 11;
+    static final int BIT_SLOPE_BARE   = 1 << 12;
+
+    // Tree coverage after slope overrides (mutually exclusive)
+    static final int BIT_TREES_NONE       = 1 << 13;
+    static final int BIT_TREES_SPARSE     = 1 << 14;
+    static final int BIT_TREES_FOREST     = 1 << 15;
+    static final int BIT_TREES_DENSE      = 1 << 16;
+    static final int BIT_TREES_RAINFOREST = 1 << 17;
+
+    // Binary condition pairs — every location has exactly one from each pair
+    static final int BIT_SNOW             = 1 << 18;
+    static final int BIT_NO_SNOW          = 1 << 19;
+    static final int BIT_BARREN           = 1 << 20;  // tooArid || tooCold
+    static final int BIT_NOT_BARREN       = 1 << 21;
+    static final int BIT_LOW_MOISTURE     = 1 << 22;  // treeMoisture < 0.35 || precip < 350
+    static final int BIT_NOT_LOW_MOISTURE = 1 << 23;
+    static final int BIT_LOW_SEASON       = 1 << 24;  // tStd < 5
+    static final int BIT_NOT_LOW_SEASON   = 1 << 25;
+
+    // All mutually exclusive condition groups. For each group, a location has exactly
+    // one bit set. addBiome uses these to expand OR conditions and "don't care" groups.
+    private static final int[][] CONDITION_GROUPS = {
+        {BIT_OCEAN, BIT_LOWLAND, BIT_MIDLAND, BIT_MOUNTAIN},
+        {BIT_FROZEN, BIT_COLD, BIT_COOL, BIT_TEMPERATE, BIT_WARM, BIT_HOT},
+        {BIT_SLOPE_NONE, BIT_SLOPE_MEDIUM, BIT_SLOPE_BARE},
+        {BIT_TREES_NONE, BIT_TREES_SPARSE, BIT_TREES_FOREST, BIT_TREES_DENSE, BIT_TREES_RAINFOREST},
+        {BIT_SNOW, BIT_NO_SNOW},
+        {BIT_BARREN, BIT_NOT_BARREN},
+        {BIT_LOW_MOISTURE, BIT_NOT_LOW_MOISTURE},
+        {BIT_LOW_SEASON, BIT_NOT_LOW_SEASON},
+    };
+
+    // Maps a fully-specified location condition mask to the biome IDs valid there.
+    // Every bit group always has exactly one bit set in the key.
+    private static final Map<Integer, short[]> BIOME_MAP;
+
+    /**
+     * Registers a biome for all condition combinations described by {@code conditions}.
+     *
+     * <p>For each condition group, the bits present in {@code conditions} form an OR:
+     * the biome is registered for every combination of one bit per group. Groups with
+     * no bits in {@code conditions} are treated as "don't care" and expanded over all
+     * their values.
+     */
+    private static void addBiome(Map<Integer, List<Short>> builder, short id, int conditions) {
+        List<int[]> groupChoices = new ArrayList<>(CONDITION_GROUPS.length);
+        for (int[] group : CONDITION_GROUPS) {
+            List<Integer> choices = new ArrayList<>();
+            for (int bit : group) {
+                if ((conditions & bit) != 0) choices.add(bit);
+            }
+            if (choices.isEmpty()) {
+                for (int bit : group) choices.add(bit);
+            }
+            int[] arr = new int[choices.size()];
+            for (int i = 0; i < arr.length; i++) arr[i] = choices.get(i);
+            groupChoices.add(arr);
+        }
+        permute(builder, id, groupChoices, 0, 0);
+    }
+
+    private static void permute(Map<Integer, List<Short>> builder, short id,
+                                 List<int[]> groupChoices, int groupIdx, int key) {
+        if (groupIdx == groupChoices.size()) {
+            builder.computeIfAbsent(key, k -> new ArrayList<>()).add(id);
+            return;
+        }
+        for (int bit : groupChoices.get(groupIdx)) {
+            permute(builder, id, groupChoices, groupIdx + 1, key | bit);
+        }
+    }
+
+    static {
+        long startTime = System.nanoTime();
+        Map<Integer, List<Short>> builder = new HashMap<>();
+
+        // Registration order matters: when multiple biomes share a key, the first registered
+        // wins under the current single-result behaviour in classify().
+
+
+        addBiome(builder, FROZEN_OCEAN, BIT_OCEAN | BIT_FROZEN);
+        addBiome(builder, COLD_OCEAN,   BIT_OCEAN | BIT_COLD);
+        addBiome(builder, WARM_OCEAN,   BIT_OCEAN | BIT_WARM | BIT_HOT);
+        addBiome(builder, OCEAN,        BIT_OCEAN | BIT_COOL | BIT_TEMPERATE);
+
+
+        addBiome(builder, FROZEN_PEAKS, BIT_MOUNTAIN | BIT_LOWLAND | BIT_MIDLAND | BIT_SLOPE_BARE | BIT_SNOW);
+        addBiome(builder, STONY_PEAKS,  BIT_MOUNTAIN | BIT_LOWLAND | BIT_MIDLAND | BIT_SLOPE_BARE | BIT_NO_SNOW);
+
+        addBiome(builder, SNOWY_SLOPES,       BIT_MOUNTAIN | BIT_SNOW | BIT_TREES_NONE);
+        addBiome(builder, SNOWY_PLAINS,       BIT_LOWLAND  | BIT_MIDLAND | BIT_SNOW | BIT_TREES_NONE);
+        addBiome(builder, SNOWY_TAIGA_SPARSE,  BIT_MOUNTAIN | BIT_LOWLAND | BIT_MIDLAND | BIT_SNOW | BIT_TREES_SPARSE | BIT_TREES_FOREST);
+        addBiome(builder, SNOWY_TAIGA,         BIT_MOUNTAIN | BIT_LOWLAND | BIT_MIDLAND | BIT_SNOW | BIT_TREES_DENSE  | BIT_TREES_RAINFOREST);
+
+        addBiome(builder, WINDSWEPT_HILLS, BIT_MOUNTAIN | BIT_NO_SNOW | BIT_TREES_NONE | BIT_BARREN);
+
+        addBiome(builder, DESERT, BIT_LOWLAND | BIT_MIDLAND | BIT_NO_SNOW | BIT_TREES_NONE | BIT_WARM | BIT_HOT);
+
+        addBiome(builder, GROVE,  BIT_MOUNTAIN | BIT_LOWLAND | BIT_MIDLAND | BIT_NO_SNOW | BIT_TREES_NONE | BIT_LOW_MOISTURE);
+
+        addBiome(builder, PLAINS, BIT_MOUNTAIN | BIT_LOWLAND | BIT_MIDLAND | BIT_NO_SNOW | BIT_TREES_NONE | BIT_NOT_LOW_MOISTURE);
+
+        addBiome(builder, JUNGLE,        BIT_LOWLAND | BIT_MIDLAND | BIT_NO_SNOW | BIT_HOT | BIT_TREES_SPARSE | BIT_TREES_FOREST | BIT_TREES_DENSE | BIT_TREES_RAINFOREST);
+
+        addBiome(builder, SAVANNA,       BIT_LOWLAND | BIT_MIDLAND | BIT_NO_SNOW | BIT_WARM | BIT_TREES_SPARSE | BIT_SLOPE_NONE);
+
+        addBiome(builder, FOREST_SPARSE, BIT_LOWLAND | BIT_MIDLAND | BIT_NO_SNOW | BIT_WARM | BIT_TEMPERATE | BIT_TREES_SPARSE | BIT_TREES_FOREST);
+
+        addBiome(builder, SWAMP,         BIT_LOWLAND | BIT_NO_SNOW | BIT_WARM | BIT_TREES_DENSE | BIT_TREES_RAINFOREST);
+
+        addBiome(builder, FOREST,        BIT_LOWLAND | BIT_MIDLAND | BIT_NO_SNOW | BIT_WARM | BIT_TEMPERATE | BIT_TREES_DENSE | BIT_TREES_RAINFOREST);
+
+        addBiome(builder, TAIGA_SPARSE,  BIT_MOUNTAIN | BIT_LOWLAND | BIT_MIDLAND | BIT_NO_SNOW | BIT_TREES_SPARSE | BIT_TREES_FOREST);
+
+        addBiome(builder, TAIGA,         BIT_MOUNTAIN | BIT_LOWLAND | BIT_MIDLAND | BIT_NO_SNOW | BIT_TREES_DENSE  | BIT_TREES_RAINFOREST);
+
+        // Convert List<Short> values to short[] for cache-friendly access
+        Map<Integer, short[]> result = new HashMap<>(builder.size() * 2);
+        builder.forEach((key, list) -> {
+            short[] arr = new short[list.size()];
+            for (int i = 0; i < arr.length; i++) arr[i] = list.get(i);
+            result.put(key, arr);
+        });
+        BIOME_MAP = result;
+        long elapsedMs = (System.nanoTime() - startTime) / 1_000_000;
+        System.out.printf("[Terrain Diffusion] BIOME_MAP built: %d entries in %d ms%n", BIOME_MAP.size(), elapsedMs);
+    }
 
     /**
      * Classify biomes for a grid of pixels.
@@ -166,65 +317,44 @@ public final class BiomeClassifier {
                 boolean warm      = temp >= 20f && temp < 26f;
                 boolean hot       = temp >= 26f;
 
-                short biome = PLAINS;
+                // Additional derived conditions
+                boolean isLowMoisture = treeMoisture < 0.35f || precip < 350f;
+                boolean isLowSeason   = tStd < 5f;
 
-                if (isOcean) {
-                    if (frozen) biome = FROZEN_OCEAN;
-                    else if (cold) biome = COLD_OCEAN;
-                    else if (warm || hot) biome = WARM_OCEAN;
-                    else biome = OCEAN;
-                } else if (mountains) {
-                    if (slopeBare) {
-                        biome = hasSnow ? FROZEN_PEAKS : STONY_PEAKS;
-                    } else if (hasSnow) {
-                        if (treesNone) biome = SNOWY_SLOPES;
-                        else if (treesSparse || treesForest) biome = SNOWY_TAIGA_SPARSE;
-                        else biome = SNOWY_TAIGA;
-                    } else if (treesNone) {
-                        if (barren) biome = WINDSWEPT_HILLS;
-                        else if (treeMoisture < 0.35f || precip < 350f) biome = GROVE;
-                        else biome = PLAINS;
-                    } else if (treesSparse || treesForest) {
-                        biome = TAIGA_SPARSE;
-                    } else {
-                        biome = TAIGA;
-                    }
-                } else {
-                    // Lowland/midland
-                    if (hasSnow && treesNone) {
-                        biome = SNOWY_PLAINS;
-                    } else if (hasSnow) {
-                        biome = (treesSparse || treesForest) ? SNOWY_TAIGA_SPARSE : SNOWY_TAIGA;
-                    } else if (treesNone) {
-                        if (warm || hot) biome = DESERT;
-                        else if (barren && !lowland && (cold || cool || temperate)) biome = GROVE;
-                        else if (treeMoisture < 0.35f || precip < 350f) biome = GROVE;
-                        else biome = PLAINS;
-                    } else if (treesSparse || treesForest) {
-                        if (hot) biome = JUNGLE;
-                        else if (warm && treesSparse && !slopeMedium) biome = SAVANNA;
-                        else if (warm && treesForest) biome = FOREST_SPARSE;
-                        else if (temperate) biome = FOREST_SPARSE;
-                        else biome = TAIGA_SPARSE;
-                    } else if (treesDense) {
-                        if (hot) biome = JUNGLE;
-                        else if (warm && lowland) biome = SWAMP;
-                        else if (cool || cold) biome = TAIGA;
-                        else biome = FOREST;
-                    } else { // rainforest
-                        if (hot || (warm && temp >= 18f && tStd < 5f)) biome = JUNGLE;
-                        else if (lowland) biome = SWAMP;
-                        else if (cool || cold) biome = TAIGA;
-                        else biome = FOREST;
-                    }
-                }
+                // Build location condition mask
+                int locMask = 0;
 
-                // Bare slope override for lowland/non-mountain cliffs
-                if (slopeBare && !isOcean && !mountains) {
-                    biome = hasSnow ? FROZEN_PEAKS : STONY_PEAKS;
-                }
+                // Terrain (ocean overrides lowland since both can be true when elevVal < 0)
+                if (isOcean) locMask |= BIT_OCEAN;
+                else if (mountains) locMask |= BIT_MOUNTAIN;
+                else if (lowland) locMask |= BIT_LOWLAND;
+                else locMask |= BIT_MIDLAND;
 
-                out[idx] = biome;
+                if (frozen) locMask |= BIT_FROZEN;
+                else if (cold) locMask |= BIT_COLD;
+                else if (cool) locMask |= BIT_COOL;
+                else if (temperate) locMask |= BIT_TEMPERATE;
+                else if (warm) locMask |= BIT_WARM;
+                else locMask |= BIT_HOT;
+
+                if (slopeBare) locMask |= BIT_SLOPE_BARE;
+                else if (slopeMedium) locMask |= BIT_SLOPE_MEDIUM;
+                else locMask |= BIT_SLOPE_NONE;
+
+                if (treesNone) locMask |= BIT_TREES_NONE;
+                else if (treesSparse) locMask |= BIT_TREES_SPARSE;
+                else if (treesForest) locMask |= BIT_TREES_FOREST;
+                else if (treesDense) locMask |= BIT_TREES_DENSE;
+                else locMask |= BIT_TREES_RAINFOREST;
+
+                locMask |= hasSnow       ? BIT_SNOW         : BIT_NO_SNOW;
+                locMask |= barren        ? BIT_BARREN        : BIT_NOT_BARREN;
+                locMask |= isLowMoisture ? BIT_LOW_MOISTURE  : BIT_NOT_LOW_MOISTURE;
+                locMask |= isLowSeason   ? BIT_LOW_SEASON    : BIT_NOT_LOW_SEASON;
+
+                // Look up matching biomes and use the first one
+                short[] biomes = BIOME_MAP.get(locMask);
+                out[idx] = (biomes != null) ? biomes[0] : PLAINS;
             }
         }
         return out;
