@@ -1,5 +1,8 @@
 package com.github.xandergos.terraindiffusionmc.pipeline;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -12,7 +15,7 @@ import java.util.Map;
  * Biome IDs match the Python server's _BIOME_ID mapping.
  */
 public final class BiomeClassifier {
-
+    private static final Logger LOG = LoggerFactory.getLogger(BiomeClassifier.class);
     // Fixed-seed noise instances (matching Python's module-level _TEMP_NOISE etc.)
     private static final FastNoiseLite TEMP_NOISE, TEMP_NOISE_FINE;
     private static final FastNoiseLite PRECIP_NOISE;
@@ -358,7 +361,7 @@ public final class BiomeClassifier {
         });
         BIOME_MAP = result;
         long elapsedMs = (System.nanoTime() - startTime) / 1_000_000;
-        System.out.printf("[Terrain Diffusion] BIOME_MAP built: %d entries in %d ms%n", BIOME_MAP.size(), elapsedMs);
+        LOG.info("BIOME_MAP built: {} entries in {} ms", BIOME_MAP.size(), elapsedMs);
     }
 
     /**
