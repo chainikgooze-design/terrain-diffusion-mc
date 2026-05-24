@@ -37,67 +37,69 @@ public final class BiomeClassifier {
         return fnl;
     }
 
+    private enum elevation {
+        DEEP_OCEAN,
+        OCEAN,
+        LOWLAND,
+        MIDLAND,
+        HIGHLAND,
+        MOUNTAIN
+    }
+
+    private enum temperature {
+        FROZEN,
+        COLD,
+        COOL,
+        TEMPERATE,
+        WARM,
+        HOT
+    }
+
+    private enum slope {
+        NONE,
+        MEDIUM,
+        BARE
+    }
+
+    private enum treeCoverage {
+        BARREN,
+        NONE,
+        SPARSE,
+        FOREST,
+        DENSE,
+        RAINFOREST
+    }
+
+    //borrowed from ThatDamnWittyWhizHard's PR
+    private enum moisture {
+        VERY_DRY,
+        DRY,
+        SEMI_DRY,
+        MOIST,
+        VERY_MOIST,
+        SATURATED
+    }
+
+
+    //records are automatically given hash functions which makes it easier to use with HashMap.
+    record climate(
+            elevation elev,
+            temperature temp,
+            slope slope,
+            treeCoverage treecover,
+            moisture moist,
+            boolean snow
+    ){};
+
+
     // Biome IDs
-    static final short PLAINS = 1, SNOWY_PLAINS = 3, DESERT = 5, SWAMP = 6;
-    static final short FOREST = 8, TAIGA = 15, SNOWY_TAIGA = 16, SAVANNA = 17;
-    static final short WINDSWEPT_HILLS = 19, JUNGLE = 23, BADLANDS = 26, MEADOW = 29;
-    static final short GROVE = 31, SNOWY_SLOPES = 32, FROZEN_PEAKS = 33, STONY_PEAKS = 35;
-    static final short WARM_OCEAN = 41, OCEAN = 44, COLD_OCEAN = 46, FROZEN_OCEAN = 48;
-    static final short FOREST_SPARSE = 108, TAIGA_SPARSE = 115, SNOWY_TAIGA_SPARSE = 116;
 
-    // --- Climate condition bits ---
-    // Terrain (mutually exclusive; ocean overrides lowland when elevVal < 0)
-    static final int BIT_OCEAN    = 1 << 0;
-    static final int BIT_LOWLAND  = 1 << 1;  // altM < 200, non-ocean
-    static final int BIT_MIDLAND  = 1 << 2;  // 200 <= altM < 2500, non-ocean
-    static final int BIT_MOUNTAIN = 1 << 3;  // altM >= 2500
 
-    // Temperature bands (mutually exclusive)
-    static final int BIT_FROZEN    = 1 << 4;  // temp < -5
-    static final int BIT_COLD      = 1 << 5;  // -5 <= temp < 5
-    static final int BIT_COOL      = 1 << 6;  // 5 <= temp < 12
-    static final int BIT_TEMPERATE = 1 << 7;  // 12 <= temp < 20
-    static final int BIT_WARM      = 1 << 8;  // 20 <= temp < 26
-    static final int BIT_HOT       = 1 << 9;  // temp >= 26
 
-    // Slope state (mutually exclusive)
-    static final int BIT_SLOPE_NONE   = 1 << 10;
-    static final int BIT_SLOPE_MEDIUM = 1 << 11;
-    static final int BIT_SLOPE_BARE   = 1 << 12;
-
-    // Tree coverage after slope overrides (mutually exclusive)
-    static final int BIT_TREES_NONE       = 1 << 13;
-    static final int BIT_TREES_SPARSE     = 1 << 14;
-    static final int BIT_TREES_FOREST     = 1 << 15;
-    static final int BIT_TREES_DENSE      = 1 << 16;
-    static final int BIT_TREES_RAINFOREST = 1 << 17;
-
-    // Binary condition pairs — every location has exactly one from each pair
-    static final int BIT_SNOW             = 1 << 18;
-    static final int BIT_NO_SNOW          = 1 << 19;
-    static final int BIT_BARREN           = 1 << 20;  // tooArid || tooCold
-    static final int BIT_NOT_BARREN       = 1 << 21;
-    static final int BIT_LOW_MOISTURE     = 1 << 22;  // treeMoisture < 0.35 || precip < 350
-    static final int BIT_NOT_LOW_MOISTURE = 1 << 23;
-    static final int BIT_LOW_SEASON       = 1 << 24;  // tStd < 5
-    static final int BIT_NOT_LOW_SEASON   = 1 << 25;
-
-    // All mutually exclusive condition groups. For each group, a location has exactly
-    // one bit set. addBiome uses these to expand OR conditions and "don't care" groups.
-    private static final int[][] CONDITION_GROUPS = {
-        {BIT_OCEAN, BIT_LOWLAND, BIT_MIDLAND, BIT_MOUNTAIN},
-        {BIT_FROZEN, BIT_COLD, BIT_COOL, BIT_TEMPERATE, BIT_WARM, BIT_HOT},
-        {BIT_SLOPE_NONE, BIT_SLOPE_MEDIUM, BIT_SLOPE_BARE},
-        {BIT_TREES_NONE, BIT_TREES_SPARSE, BIT_TREES_FOREST, BIT_TREES_DENSE, BIT_TREES_RAINFOREST},
-        {BIT_SNOW, BIT_NO_SNOW},
-        {BIT_BARREN, BIT_NOT_BARREN},
-        {BIT_LOW_MOISTURE, BIT_NOT_LOW_MOISTURE},
-        {BIT_LOW_SEASON, BIT_NOT_LOW_SEASON},
-    };
 
     // Maps a fully-specified location condition mask to the biome IDs valid there.
     // Every bit group always has exactly one bit set in the key.
-    private static final Map<Integer, short[]> BIOME_MAP;
+    private static final HashMap<climate, short[]> BIOME_MAP;
 
     /**
      * Registers a biome for all condition combinations described by {@code conditions}.
@@ -107,80 +109,248 @@ public final class BiomeClassifier {
      * no bits in {@code conditions} are treated as "don't care" and expanded over all
      * their values.
      */
-    private static void addBiome(Map<Integer, List<Short>> builder, short id, int conditions) {
-        List<int[]> groupChoices = new ArrayList<>(CONDITION_GROUPS.length);
-        for (int[] group : CONDITION_GROUPS) {
-            List<Integer> choices = new ArrayList<>();
-            for (int bit : group) {
-                if ((conditions & bit) != 0) choices.add(bit);
-            }
-            if (choices.isEmpty()) {
-                for (int bit : group) choices.add(bit);
-            }
-            int[] arr = new int[choices.size()];
-            for (int i = 0; i < arr.length; i++) arr[i] = choices.get(i);
-            groupChoices.add(arr);
-        }
-        permute(builder, id, groupChoices, 0, 0);
+    private static void addBiome(Map<climate, List<Short>> builder, short id,
+                                 elevation[] elevations,
+                                 temperature[] temperatures,
+                                 slope[] slopes,
+                                 treeCoverage[] treeCoverages,
+                                 moisture[] moistures,
+                                 boolean[] hasSnow) {
+
+        //if any of the inputs are null, we consider that a "dont care" and fill in every combination.
+        if (elevations == null) elevations = new elevation[]{elevation.LOWLAND, elevation.MIDLAND, elevation.HIGHLAND, elevation.MOUNTAIN};
+        if (temperatures == null) temperatures = temperature.values();
+        if (slopes == null) slopes = new slope[]{slope.MEDIUM, slope.NONE};
+        if (treeCoverages == null) treeCoverages = treeCoverage.values();
+        if (moistures == null) moistures = moisture.values();
+        if (hasSnow == null) hasSnow = new boolean[] {false, true}; //this seems weird but trust me it makes sense i think
+
+        //blech
+        for (elevation elev : elevations)
+            for (temperature temp : temperatures)
+                for (slope slope : slopes)
+                    for (treeCoverage trees : treeCoverages)
+                        for (moisture moist : moistures)
+                            for (boolean snow : hasSnow)
+                            {
+                                climate c = new climate(elev, temp, slope, trees, moist, snow);
+                                builder.computeIfAbsent(c, k -> new ArrayList<>()).add(id);
+                            }
+
     }
 
-    private static void permute(Map<Integer, List<Short>> builder, short id,
-                                 List<int[]> groupChoices, int groupIdx, int key) {
-        if (groupIdx == groupChoices.size()) {
-            builder.computeIfAbsent(key, k -> new ArrayList<>()).add(id);
-            return;
-        }
-        for (int bit : groupChoices.get(groupIdx)) {
-            permute(builder, id, groupChoices, groupIdx + 1, key | bit);
-        }
-    }
 
     static {
         long startTime = System.nanoTime();
-        Map<Integer, List<Short>> builder = new HashMap<>();
-
-        // Registration order matters: when multiple biomes share a key, the first registered
-        // wins under the current single-result behaviour in classify().
+        Map<climate, List<Short>> builder = new HashMap<>(1024);
 
 
-        addBiome(builder, FROZEN_OCEAN, BIT_OCEAN | BIT_FROZEN);
-        addBiome(builder, COLD_OCEAN,   BIT_OCEAN | BIT_COLD);
-        addBiome(builder, WARM_OCEAN,   BIT_OCEAN | BIT_WARM | BIT_HOT);
-        addBiome(builder, OCEAN,        BIT_OCEAN | BIT_COOL | BIT_TEMPERATE);
+        addBiome(builder, BiomePalette.FROZEN_OCEAN,
+                new elevation[] {elevation.OCEAN},
+                new temperature[] {temperature.FROZEN},
+                new slope[] {slope.BARE, slope.MEDIUM, slope.NONE},
+                null,
+                null,
+                null
+        );
+
+        addBiome(builder, BiomePalette.COLD_OCEAN,
+                new elevation[] {elevation.OCEAN},
+                new temperature[] {temperature.COLD},
+                new slope[] {slope.BARE, slope.MEDIUM, slope.NONE},
+                null,
+                null,
+                null
+        );
+
+        addBiome(builder, BiomePalette.WARM_OCEAN,
+                new elevation[] {elevation.OCEAN},
+                new temperature[] {temperature.WARM, temperature.HOT},
+                new slope[] {slope.BARE, slope.MEDIUM, slope.NONE},
+                null,
+                null,
+                null
+        );
+
+        addBiome(builder, BiomePalette.OCEAN,
+                new elevation[] {elevation.OCEAN},
+                new temperature[] {temperature.COOL, temperature.TEMPERATE},
+                new slope[] {slope.BARE, slope.MEDIUM, slope.NONE},
+                null,
+                null,
+                null
+        );
+
+        addBiome(builder, BiomePalette.DEEP_OCEAN,
+                new elevation[] {elevation.DEEP_OCEAN},
+                null,
+                new slope[] {slope.BARE, slope.MEDIUM, slope.NONE},
+                null,
+                null,
+                null
+        );
 
 
-        addBiome(builder, FROZEN_PEAKS, BIT_MOUNTAIN | BIT_LOWLAND | BIT_MIDLAND | BIT_SLOPE_BARE | BIT_SNOW);
-        addBiome(builder, STONY_PEAKS,  BIT_MOUNTAIN | BIT_LOWLAND | BIT_MIDLAND | BIT_SLOPE_BARE | BIT_NO_SNOW);
+        //slope overrides, this should probably be hardcoded or implemented an entirely different way but idk.
+        addBiome(builder, BiomePalette.FROZEN_PEAKS,
+                new elevation[] {elevation.LOWLAND, elevation.MIDLAND, elevation.HIGHLAND, elevation.MOUNTAIN},
+                null,
+                new slope[] {slope.BARE},
+                null,
+                null,
+                new boolean[] {true}
+        );
 
-        addBiome(builder, SNOWY_SLOPES,       BIT_MOUNTAIN | BIT_SNOW | BIT_TREES_NONE);
-        addBiome(builder, SNOWY_PLAINS,       BIT_LOWLAND  | BIT_MIDLAND | BIT_SNOW | BIT_TREES_NONE);
-        addBiome(builder, SNOWY_TAIGA_SPARSE,  BIT_MOUNTAIN | BIT_LOWLAND | BIT_MIDLAND | BIT_SNOW | BIT_TREES_SPARSE | BIT_TREES_FOREST);
-        addBiome(builder, SNOWY_TAIGA,         BIT_MOUNTAIN | BIT_LOWLAND | BIT_MIDLAND | BIT_SNOW | BIT_TREES_DENSE  | BIT_TREES_RAINFOREST);
+        addBiome(builder, BiomePalette.STONY_PEAKS,
+                new elevation[] {elevation.LOWLAND, elevation.MIDLAND, elevation.HIGHLAND, elevation.MOUNTAIN},
+                null,
+                new slope[] {slope.BARE},
+                null,
+                null,
+                new boolean[] {false}
+        );
+        //----
 
-        addBiome(builder, WINDSWEPT_HILLS, BIT_MOUNTAIN | BIT_NO_SNOW | BIT_TREES_NONE | BIT_BARREN);
 
-        addBiome(builder, DESERT, BIT_LOWLAND | BIT_MIDLAND | BIT_NO_SNOW | BIT_TREES_NONE | BIT_WARM | BIT_HOT);
+        addBiome(builder, BiomePalette.SNOWY_SLOPES,
+                new elevation[] {elevation.MOUNTAIN},
+                null,
+                null,
+                new treeCoverage[]{treeCoverage.NONE},
+                null,
+                new boolean[] {true}
+        );
 
-        addBiome(builder, GROVE,  BIT_MOUNTAIN | BIT_LOWLAND | BIT_MIDLAND | BIT_NO_SNOW | BIT_TREES_NONE | BIT_LOW_MOISTURE);
+        addBiome(builder, BiomePalette.SNOWY_PLAINS,
+                new elevation[] {elevation.LOWLAND, elevation.MIDLAND},
+                null,
+                null,
+                new treeCoverage[]{treeCoverage.NONE, treeCoverage.BARREN},
+                null,
+                new boolean[] {true}
+        );
 
-        addBiome(builder, PLAINS, BIT_MOUNTAIN | BIT_LOWLAND | BIT_MIDLAND | BIT_NO_SNOW | BIT_TREES_NONE | BIT_NOT_LOW_MOISTURE);
+        addBiome(builder, BiomePalette.SNOWY_TAIGA_SPARSE,
+                new elevation[] {elevation.LOWLAND, elevation.MIDLAND, elevation.HIGHLAND, elevation.MOUNTAIN},
+                null,
+                null,
+                new treeCoverage[]{treeCoverage.SPARSE},
+                null,
+                new boolean[] {true}
+        );
 
-        addBiome(builder, JUNGLE,        BIT_LOWLAND | BIT_MIDLAND | BIT_NO_SNOW | BIT_HOT | BIT_TREES_SPARSE | BIT_TREES_FOREST | BIT_TREES_DENSE | BIT_TREES_RAINFOREST);
+        addBiome(builder, BiomePalette.SNOWY_TAIGA,
+                new elevation[] {elevation.LOWLAND, elevation.MIDLAND, elevation.HIGHLAND, elevation.MOUNTAIN},
+                null,
+                null,
+                new treeCoverage[]{treeCoverage.FOREST, treeCoverage.DENSE, treeCoverage.RAINFOREST},
+                null,
+                new boolean[] {true}
+        );
 
-        addBiome(builder, SAVANNA,       BIT_LOWLAND | BIT_MIDLAND | BIT_NO_SNOW | BIT_WARM | BIT_TREES_SPARSE | BIT_SLOPE_NONE);
+        addBiome(builder, BiomePalette.WINDSWEPT_HILLS,
+                new elevation[] {elevation.MOUNTAIN},
+                null,
+                null,
+                new treeCoverage[]{treeCoverage.BARREN},
+                null,
+                new boolean[] {false}
+        );
 
-        addBiome(builder, FOREST_SPARSE, BIT_LOWLAND | BIT_MIDLAND | BIT_NO_SNOW | BIT_WARM | BIT_TEMPERATE | BIT_TREES_SPARSE | BIT_TREES_FOREST);
+        addBiome(builder, BiomePalette.DESERT,
+                new elevation[] {elevation.LOWLAND, elevation.MIDLAND},
+                new temperature[]{temperature.WARM, temperature.HOT},
+                null,
+                new treeCoverage[]{treeCoverage.NONE, treeCoverage.BARREN},
+                null,
+                new boolean[] {false}
+        );
 
-        addBiome(builder, SWAMP,         BIT_LOWLAND | BIT_NO_SNOW | BIT_WARM | BIT_TREES_DENSE | BIT_TREES_RAINFOREST);
+        addBiome(builder, BiomePalette.GROVE,
+                new elevation[] {elevation.MIDLAND, elevation.LOWLAND, elevation.HIGHLAND},
+                null,
+                null,
+                new treeCoverage[]{treeCoverage.NONE, treeCoverage.BARREN},
+                new moisture[] {moisture.SEMI_DRY, moisture.DRY, moisture.VERY_DRY},
+                new boolean[] {false}
+        );
 
-        addBiome(builder, FOREST,        BIT_LOWLAND | BIT_MIDLAND | BIT_NO_SNOW | BIT_WARM | BIT_TEMPERATE | BIT_TREES_DENSE | BIT_TREES_RAINFOREST);
+        addBiome(builder, BiomePalette.PLAINS,
+                new elevation[] {elevation.MIDLAND, elevation.LOWLAND, elevation.HIGHLAND},
+                null,
+                null,
+                new treeCoverage[]{treeCoverage.NONE, treeCoverage.BARREN},
+                new moisture[] {moisture.MOIST, moisture.VERY_MOIST, moisture.SATURATED},
+                new boolean[] {false}
+        );
 
-        addBiome(builder, TAIGA_SPARSE,  BIT_MOUNTAIN | BIT_LOWLAND | BIT_MIDLAND | BIT_NO_SNOW | BIT_TREES_SPARSE | BIT_TREES_FOREST);
+        addBiome(builder, BiomePalette.JUNGLE,
+                new elevation[] {elevation.MIDLAND, elevation.LOWLAND},
+                new temperature[] {temperature.WARM, temperature.HOT},
+                null,
+                new treeCoverage[]{treeCoverage.FOREST, treeCoverage.DENSE, treeCoverage.RAINFOREST},
+                null,
+                new boolean[] {false}
+        );
 
-        addBiome(builder, TAIGA,         BIT_MOUNTAIN | BIT_LOWLAND | BIT_MIDLAND | BIT_NO_SNOW | BIT_TREES_DENSE  | BIT_TREES_RAINFOREST);
+        addBiome(builder, BiomePalette.SAVANNA,
+                new elevation[] {elevation.MIDLAND, elevation.LOWLAND},
+                new temperature[] {temperature.WARM, temperature.HOT},
+                null,
+                new treeCoverage[]{treeCoverage.SPARSE},
+                null,
+                new boolean[] {false}
+        );
+
+        addBiome(builder, BiomePalette.FOREST_SPARSE,
+                new elevation[] {elevation.MIDLAND, elevation.LOWLAND},
+                new temperature[] {temperature.WARM, temperature.TEMPERATE},
+                null,
+                new treeCoverage[]{treeCoverage.SPARSE},
+                null,
+                new boolean[] {false}
+        );
+
+        addBiome(builder, BiomePalette.SWAMP,
+                new elevation[] {elevation.LOWLAND},
+                new temperature[] {temperature.WARM, temperature.HOT},
+                null,
+                new treeCoverage[]{treeCoverage.DENSE, treeCoverage.RAINFOREST},
+                null,
+                new boolean[] {false}
+        );
+
+
+        addBiome(builder, BiomePalette.FOREST,
+                new elevation[] {elevation.LOWLAND, elevation.MIDLAND},
+                new temperature[] {temperature.WARM, temperature.TEMPERATE},
+                null,
+                new treeCoverage[]{treeCoverage.DENSE, treeCoverage.FOREST},
+                null,
+                new boolean[] {false}
+        );
+
+        addBiome(builder, BiomePalette.TAIGA_SPARSE,
+                new elevation[] {elevation.LOWLAND, elevation.MIDLAND, elevation.MOUNTAIN},
+                new temperature[] {temperature.COOL, temperature.COLD},
+                null,
+                new treeCoverage[]{treeCoverage.SPARSE},
+                null,
+                new boolean[] {false}
+        );
+
+        addBiome(builder, BiomePalette.TAIGA,
+                new elevation[] {elevation.LOWLAND, elevation.MIDLAND, elevation.MOUNTAIN},
+                new temperature[] {temperature.COOL, temperature.COLD, temperature.FROZEN},
+                null,
+                new treeCoverage[]{treeCoverage.DENSE, treeCoverage.FOREST, treeCoverage.RAINFOREST},
+                null,
+                new boolean[] {false}
+        );
+
 
         // Convert List<Short> values to short[] for cache-friendly access
-        Map<Integer, short[]> result = new HashMap<>(builder.size() * 2);
+        HashMap<climate, short[]> result = new HashMap<>(builder.size() * 2);
         builder.forEach((key, list) -> {
             short[] arr = new short[list.size()];
             for (int i = 0; i < arr.length; i++) arr[i] = list.get(i);
@@ -207,7 +377,7 @@ public final class BiomeClassifier {
     public static short[] classify(float[] elev, float[] climate, int i0, int j0,
                                     float[] elevPadded, int H, int W, float pixelSizeM) {
         short[] out = new short[H * W];
-        for (int i = 0; i < H * W; i++) out[i] = PLAINS;
+        for (int i = 0; i < H * W; i++) out[i] = BiomePalette.OCEAN;
 
         if (climate == null || climate.length < 4 * H * W) {
             return out;
@@ -310,6 +480,7 @@ public final class BiomeClassifier {
                 boolean isOcean   = elevVal < 0f;
                 boolean mountains = altM > 2500f;
                 boolean lowland   = altM < 200f;
+
                 boolean frozen    = temp < -5f;
                 boolean cold      = temp >= -5f && temp < 5f;
                 boolean cool      = temp >= 5f  && temp < 12f;
@@ -324,44 +495,61 @@ public final class BiomeClassifier {
                 // Build location condition mask
                 int locMask = 0;
 
+                elevation Elev;
+
                 // Terrain (ocean overrides lowland since both can be true when elevVal < 0)
-                if (isOcean) locMask |= BIT_OCEAN;
-                else if (mountains) locMask |= BIT_MOUNTAIN;
-                else if (lowland) locMask |= BIT_LOWLAND;
-                else locMask |= BIT_MIDLAND;
+                if (isOcean)        Elev = elevation.OCEAN;
+                else if (mountains) Elev = elevation.MOUNTAIN;
+                else if (lowland)   Elev = elevation.LOWLAND;
+                else                Elev = elevation.MIDLAND;
 
-                if (frozen) locMask |= BIT_FROZEN;
-                else if (cold) locMask |= BIT_COLD;
-                else if (cool) locMask |= BIT_COOL;
-                else if (temperate) locMask |= BIT_TEMPERATE;
-                else if (warm) locMask |= BIT_WARM;
-                else locMask |= BIT_HOT;
+                temperature Temp;
 
-                if (slopeBare) locMask |= BIT_SLOPE_BARE;
-                else if (slopeMedium) locMask |= BIT_SLOPE_MEDIUM;
-                else locMask |= BIT_SLOPE_NONE;
+                if (frozen)         Temp = temperature.FROZEN;
+                else if (cold)      Temp = temperature.COLD;
+                else if (cool)      Temp = temperature.COOL;
+                else if (temperate) Temp = temperature.TEMPERATE;
+                else if (warm)      Temp = temperature.WARM;
+                else                Temp = temperature.HOT;
 
-                if (treesNone) locMask |= BIT_TREES_NONE;
-                else if (treesSparse) locMask |= BIT_TREES_SPARSE;
-                else if (treesForest) locMask |= BIT_TREES_FOREST;
-                else if (treesDense) locMask |= BIT_TREES_DENSE;
-                else locMask |= BIT_TREES_RAINFOREST;
+                BiomeClassifier.slope Slope;
 
-                locMask |= hasSnow       ? BIT_SNOW         : BIT_NO_SNOW;
-                locMask |= barren        ? BIT_BARREN        : BIT_NOT_BARREN;
-                locMask |= isLowMoisture ? BIT_LOW_MOISTURE  : BIT_NOT_LOW_MOISTURE;
-                locMask |= isLowSeason   ? BIT_LOW_SEASON    : BIT_NOT_LOW_SEASON;
+                if (slopeBare)          Slope = BiomeClassifier.slope.BARE;
+                else if (slopeMedium)   Slope = BiomeClassifier.slope.MEDIUM;
+                else                    Slope = BiomeClassifier.slope.NONE;
+
+                treeCoverage Cover;
+
+                if (barren) Cover =             treeCoverage.BARREN;
+                else if (treesNone) Cover =     treeCoverage.NONE;
+                else if (treesSparse) Cover =   treeCoverage.SPARSE;
+                else if (treesForest) Cover =   treeCoverage.FOREST;
+                else if (treesDense) Cover =    treeCoverage.DENSE;
+                else Cover =                    treeCoverage.RAINFOREST;
+
+                moisture Moisture;
+
+                if (treeMoisture < 0.12f || precip < 180f)          Moisture = moisture.VERY_DRY;
+                else if (treeMoisture < 0.35f || precip < 350f)     Moisture = moisture.DRY;
+                else if (treeMoisture < 0.55f || precip < 520f)     Moisture = moisture.SEMI_DRY;
+                else if (treeMoisture >= 1.45f || precip > 1650f)   Moisture = moisture.SATURATED;
+                else if (treeMoisture >= 1.15f || precip > 1250f)   Moisture = moisture.VERY_MOIST;
+                else                                                Moisture = moisture.MOIST;
+
+                                                        //probably an insane memory leak
+                BiomeClassifier.climate climateResult = new climate(Elev, Temp, Slope, Cover, Moisture, hasSnow);
+
 
                 // Look up matching biomes and use the first one
-                short[] biomes = BIOME_MAP.get(locMask);
-                out[idx] = (biomes != null) ? biomes[0] : PLAINS;
+                short[] biomes = BIOME_MAP.get(climateResult);
+                out[idx] = (biomes != null) ? biomes[0] : BiomePalette.OCEAN;
             }
         }
         return out;
     }
 
     private static float[] computeSlopeRatio(float[] elevPadded, int H, int W, float pixelSizeM) {
-        // Sobel kernels / 8 applied to (H+2, W+2) padded array → (H, W) output
+        // Sobel kernels / 8 applied to (H+2, W+2) paddedS array → (H, W) output
         float[] slope = new float[H * W];
         int PW = W + 2;
         float[] sx = {-1,0,1, -2,0,2, -1,0,1};
