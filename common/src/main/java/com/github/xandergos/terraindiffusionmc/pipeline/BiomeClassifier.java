@@ -20,20 +20,44 @@ public final class BiomeClassifier {
     private static final FastNoiseLite TEMP_NOISE, TEMP_NOISE_FINE;
     private static final FastNoiseLite PRECIP_NOISE;
     private static final FastNoiseLite SNOW_NOISE, SNOW_NOISE_FINE;
+    private static final FastNoiseLite BIOME_NOISE, BIOME_NOISE_WARP;
 
     static {
-        TEMP_NOISE = makeFnl(12345, 1f/500f, 3, 2f, 0.5f);
-        TEMP_NOISE_FINE = makeFnl(54321, 1f/128f, 2, 2f, 0.5f);
-        PRECIP_NOISE = makeFnl(12345, 1f/500f, 5, 2f, 0.5f);
-        SNOW_NOISE = makeFnl(12345, 1f/500f, 3, 2f, 0.5f);
-        SNOW_NOISE_FINE = makeFnl(54321, 1f/128f, 2, 2f, 0.5f);
+        TEMP_NOISE = makeFnlPerlin(12345, 1f/500f, 3, 2f, 0.5f);
+        TEMP_NOISE_FINE = makeFnlPerlin(54321, 1f/128f, 2, 2f, 0.5f);
+        PRECIP_NOISE = makeFnlPerlin(12345, 1f/500f, 5, 2f, 0.5f);
+        SNOW_NOISE = makeFnlPerlin(12345, 1f/500f, 3, 2f, 0.5f);
+        SNOW_NOISE_FINE = makeFnlPerlin(54321, 1f/128f, 2, 2f, 0.5f);
+        BIOME_NOISE = makeFnlCell(12345, 1f/1000f);
+        BIOME_NOISE_WARP = makeFnlWarp(12345, 1f/100f, 115f, 2, 2.0f, 0.54f);
     }
 
-    private static FastNoiseLite makeFnl(int seed, float freq, int oct, float lac, float gain) {
+    //maybe look into using fastnoise2 instead.
+    private static FastNoiseLite makeFnlPerlin(int seed, float freq, int oct, float lac, float gain) {
         FastNoiseLite fnl = new FastNoiseLite(seed);
         fnl.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
         fnl.SetFrequency(freq);
         fnl.SetFractalType(FastNoiseLite.FractalType.FBm);
+        fnl.SetFractalOctaves(oct);
+        fnl.SetFractalLacunarity(lac);
+        fnl.SetFractalGain(gain);
+        return fnl;
+    }
+
+    private static FastNoiseLite makeFnlCell(int seed, float freq) {
+        FastNoiseLite fnl = new FastNoiseLite(seed);
+        fnl.SetNoiseType(FastNoiseLite.NoiseType.Cellular);
+        fnl.SetFrequency(freq);
+        fnl.SetCellularReturnType(FastNoiseLite.CellularReturnType.CellValue);
+        return fnl;
+    }
+
+    private static FastNoiseLite makeFnlWarp(int seed, float freq, float amp, int oct, float lac, float gain) {
+        FastNoiseLite fnl = new FastNoiseLite(seed);
+        fnl.SetDomainWarpType(FastNoiseLite.DomainWarpType.OpenSimplex2);
+        fnl.SetFrequency(freq);
+        fnl.SetDomainWarpAmp(amp);
+        fnl.SetFractalType(FastNoiseLite.FractalType.DomainWarpProgressive);
         fnl.SetFractalOctaves(oct);
         fnl.SetFractalLacunarity(lac);
         fnl.SetFractalGain(gain);
@@ -269,6 +293,15 @@ public final class BiomeClassifier {
                 new boolean[] {false}
         );
 
+        addBiome(builder, BiomePalette.BADLANDS, //testing the cell noise switcher
+                new elevation[] {elevation.LOWLAND, elevation.MIDLAND},
+                new temperature[]{temperature.WARM, temperature.HOT},
+                null,
+                new treeCoverage[]{treeCoverage.NONE, treeCoverage.BARREN},
+                null,
+                new boolean[] {false}
+        );
+
         addBiome(builder, BiomePalette.GROVE,
                 new elevation[] {elevation.MIDLAND, elevation.LOWLAND, elevation.HIGHLAND},
                 null,
@@ -390,6 +423,10 @@ public final class BiomeClassifier {
         float[] tempNoise = new float[H * W];
         float[] precipNoiseFact = new float[H * W];
         float[] snowNoise = new float[H * W];
+        float[] biomeNoise = new float[H * W];
+
+        //im not sure it matters much to define it out here, probably only lowers the allocation rate by like 1kb lmao
+        FastNoiseLite.Vector2 warpvector = new FastNoiseLite.Vector2(0,0);
 
         for (int r = 0; r < H; r++) {
             for (int c = 0; c < W; c++) {
@@ -405,6 +442,10 @@ public final class BiomeClassifier {
                 float snc = SNOW_NOISE.GetNoise(nx, ny);
                 float snf = SNOW_NOISE_FINE.GetNoise(nx, ny);
                 snowNoise[idx] = 3.0f * snc + 2.0f * snf;
+
+                warpvector.x = nx; warpvector.y = ny; //mfw this is the only thing that fastnoiselite uses vectors for wtf
+                BIOME_NOISE_WARP.DomainWarp(warpvector);
+                biomeNoise[idx] = (BIOME_NOISE.GetNoise(warpvector.x, warpvector.y)+1f)/2f;
             }
         }
 
@@ -543,9 +584,21 @@ public final class BiomeClassifier {
                 BiomeClassifier.climate climateResult = new climate(Elev, Temp, Slope, Cover, Moisture, hasSnow);
 
 
-                // Look up matching biomes and use the first one
+                // Look up matching biomes and randomize based on cell noise
                 short[] biomes = BIOME_MAP.get(climateResult);
                 out[idx] = (biomes != null) ? biomes[0] : BiomePalette.OCEAN;
+                if (biomes == null || biomes.length == 0) {
+                    //using ocean for a fallback as its more obvious when there's a null condition
+                    //may seem counterintuitive but im doing this so i know where i need to fix
+                    //rather than just cover it up
+                    out[idx] = BiomePalette.OCEAN;
+                }
+                else if (biomes.length == 1) {
+                    out[idx] = biomes[0];
+                }
+                else {
+                    out[idx] = biomes[ Math.min((int)(biomeNoise[idx]*biomes.length), biomes.length - 1) ];
+                }
             }
         }
         return out;
