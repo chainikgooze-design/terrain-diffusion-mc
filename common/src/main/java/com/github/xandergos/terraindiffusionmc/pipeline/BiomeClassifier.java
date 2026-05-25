@@ -119,22 +119,15 @@ public final class BiomeClassifier {
     ){};
 
 
-    // Biome IDs
-
-
-
-
-    // Maps a fully-specified location condition mask to the biome IDs valid there.
-    // Every bit group always has exactly one bit set in the key.
+    // Maps a fully-specified location condition to the biome IDs valid there.
     private static final HashMap<climate, short[]> BIOME_MAP;
 
     /**
-     * Registers a biome for all condition combinations described by {@code conditions}.
+     * Registers a biome for all condition combinations described by the condition arrays given.
      *
-     * <p>For each condition group, the bits present in {@code conditions} form an OR:
-     * the biome is registered for every combination of one bit per group. Groups with
-     * no bits in {@code conditions} are treated as "don't care" and expanded over all
-     * their values.
+     * <p>For each condition group, the conditions present form an OR:
+     * the biome is registered for every combination. Null arrays are
+     * treated as "don't care" and expanded over all reasonable values.
      */
     private static void addBiome(Map<climate, List<Short>> builder, short id,
                                  elevation[] elevations,
@@ -532,16 +525,8 @@ public final class BiomeClassifier {
                 boolean warm      = temp >= 20f && temp < 26f;
                 boolean hot       = temp >= 26f;
 
-                // Additional derived conditions
-                boolean isLowMoisture = treeMoisture < 0.35f || precip < 350f;
-                boolean isLowSeason   = tStd < 5f;
-
-                // Build location condition mask
-                int locMask = 0;
-
                 elevation Elev;
 
-                // Terrain (ocean overrides lowland since both can be true when elevVal < 0)
                 if (isOcean)        Elev = elevation.OCEAN;
                 else if (mountains) Elev = elevation.MOUNTAIN;
                 else if (lowland)   Elev = elevation.LOWLAND;
