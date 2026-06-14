@@ -1,5 +1,13 @@
 package com.github.xandergos.terraindiffusionmc.pipeline;
 
+import com.github.xandergos.terraindiffusionmc.mixin.BiomeAccessor;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.BiomeTags;
+import net.minecraft.world.level.biome.Biome;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -120,7 +128,15 @@ public final class BiomeClassifier {
 
 
     // Maps a fully-specified location condition to the biome IDs valid there.
-    private static final HashMap<climate, short[]> BIOME_MAP;
+    // Populated dynamically by {@link #initializeDynamic(HolderLookup.Provider)}.
+    private static volatile HashMap<climate, short[]> BIOME_MAP = new HashMap<>();
+
+    // Dynamic ID allocation: bidirectional Identifier <-> short mapping for downstream consumers.
+    private static final HashMap<Short, ResourceLocation> ID_TO_BIOME = new HashMap<>();
+    private static final HashMap<ResourceLocation, Short> BIOME_TO_ID = new HashMap<>();
+    private static short nextBiomeId = 1; // 0 reserved as "unassigned" / fallback sentinel
+    private static short fallbackBiomeId = 0;
+    private static volatile boolean initialized = false;
 
     /**
      * Registers a biome for all condition combinations described by the condition arrays given.
@@ -160,223 +176,32 @@ public final class BiomeClassifier {
     }
 
 
-    static {
+    // The previously hardcoded BIOME_MAP static initializer has been removed.
+    // Biomes are now discovered dynamically from the live registry at server start.
+    // See initializeDynamic(HolderLookup.Provider) below.
+
+    /**
+     * Dynamically scans the biome registry and registers every biome (vanilla + modded)
+     * into BIOME_MAP based on its Minecraft-side properties.
+     *
+     * <p>Must be called once after the registries are loaded (e.g. during server start)
+     * before classify() is invoked. Safe to call multiple times; the map is rebuilt each time.
+     */
+    public static synchronized void initializeDynamic(HolderLookup.Provider registries) {
         long startTime = System.nanoTime();
         Map<climate, List<Short>> builder = new HashMap<>(1024);
+        ID_TO_BIOME.clear();
+        BIOME_TO_ID.clear();
+        nextBiomeId = 1;
 
+        HolderLookup.RegistryLookup<Biome> biomeRegistry = registries.lookupOrThrow(Registries.BIOME);
+        BlockPos samplePos = BlockPos.ZERO;
 
-        addBiome(builder, BiomePalette.FROZEN_OCEAN,
-                new elevation[] {elevation.OCEAN},
-                new temperature[] {temperature.FROZEN},
-                new slope[] {slope.BARE, slope.MEDIUM, slope.NONE},
-                null,
-                null,
-                null
-        );
+        biomeRegistry.listElements().forEach(entry -> registerBiomeEntry(builder, entry, samplePos));
 
-        addBiome(builder, BiomePalette.COLD_OCEAN,
-                new elevation[] {elevation.OCEAN},
-                new temperature[] {temperature.COLD},
-                new slope[] {slope.BARE, slope.MEDIUM, slope.NONE},
-                null,
-                null,
-                null
-        );
-
-        addBiome(builder, BiomePalette.WARM_OCEAN,
-                new elevation[] {elevation.OCEAN},
-                new temperature[] {temperature.WARM, temperature.HOT},
-                new slope[] {slope.BARE, slope.MEDIUM, slope.NONE},
-                null,
-                null,
-                null
-        );
-
-        addBiome(builder, BiomePalette.OCEAN,
-                new elevation[] {elevation.OCEAN},
-                new temperature[] {temperature.COOL, temperature.TEMPERATE},
-                new slope[] {slope.BARE, slope.MEDIUM, slope.NONE},
-                null,
-                null,
-                null
-        );
-
-        addBiome(builder, BiomePalette.DEEP_OCEAN,
-                new elevation[] {elevation.DEEP_OCEAN},
-                null,
-                new slope[] {slope.BARE, slope.MEDIUM, slope.NONE},
-                null,
-                null,
-                null
-        );
-
-
-        //slope overrides, this should probably be hardcoded or implemented an entirely different way but idk.
-        addBiome(builder, BiomePalette.FROZEN_PEAKS,
-                new elevation[] {elevation.LOWLAND, elevation.MIDLAND, elevation.HIGHLAND, elevation.MOUNTAIN},
-                null,
-                new slope[] {slope.BARE},
-                null,
-                null,
-                new boolean[] {true}
-        );
-
-        addBiome(builder, BiomePalette.STONY_PEAKS,
-                new elevation[] {elevation.LOWLAND, elevation.MIDLAND, elevation.HIGHLAND, elevation.MOUNTAIN},
-                null,
-                new slope[] {slope.BARE},
-                null,
-                null,
-                new boolean[] {false}
-        );
-        //----
-
-
-        addBiome(builder, BiomePalette.SNOWY_SLOPES,
-                new elevation[] {elevation.MOUNTAIN},
-                null,
-                null,
-                new treeCoverage[]{treeCoverage.NONE},
-                null,
-                new boolean[] {true}
-        );
-
-        addBiome(builder, BiomePalette.SNOWY_PLAINS,
-                new elevation[] {elevation.LOWLAND, elevation.MIDLAND},
-                null,
-                null,
-                new treeCoverage[]{treeCoverage.NONE, treeCoverage.BARREN},
-                null,
-                new boolean[] {true}
-        );
-
-        addBiome(builder, BiomePalette.SNOWY_TAIGA_SPARSE,
-                new elevation[] {elevation.LOWLAND, elevation.MIDLAND, elevation.HIGHLAND, elevation.MOUNTAIN},
-                null,
-                null,
-                new treeCoverage[]{treeCoverage.SPARSE},
-                null,
-                new boolean[] {true}
-        );
-
-        addBiome(builder, BiomePalette.SNOWY_TAIGA,
-                new elevation[] {elevation.LOWLAND, elevation.MIDLAND, elevation.HIGHLAND, elevation.MOUNTAIN},
-                null,
-                null,
-                new treeCoverage[]{treeCoverage.FOREST, treeCoverage.DENSE, treeCoverage.RAINFOREST},
-                null,
-                new boolean[] {true}
-        );
-
-        addBiome(builder, BiomePalette.WINDSWEPT_HILLS,
-                new elevation[] {elevation.MOUNTAIN},
-                null,
-                null,
-                new treeCoverage[]{treeCoverage.BARREN},
-                null,
-                new boolean[] {false}
-        );
-
-        addBiome(builder, BiomePalette.DESERT,
-                new elevation[] {elevation.LOWLAND, elevation.MIDLAND},
-                new temperature[]{temperature.WARM, temperature.HOT},
-                null,
-                new treeCoverage[]{treeCoverage.NONE, treeCoverage.BARREN},
-                null,
-                new boolean[] {false}
-        );
-
-        addBiome(builder, BiomePalette.BADLANDS, //testing the cell noise switcher
-                new elevation[] {elevation.LOWLAND, elevation.MIDLAND},
-                new temperature[]{temperature.WARM, temperature.HOT},
-                null,
-                new treeCoverage[]{treeCoverage.NONE, treeCoverage.BARREN},
-                null,
-                new boolean[] {false}
-        );
-
-        addBiome(builder, BiomePalette.GROVE,
-                new elevation[] {elevation.MIDLAND, elevation.LOWLAND, elevation.HIGHLAND},
-                null,
-                null,
-                new treeCoverage[]{treeCoverage.NONE, treeCoverage.BARREN},
-                new moisture[] {moisture.SEMI_DRY, moisture.DRY, moisture.VERY_DRY},
-                new boolean[] {false}
-        );
-
-        addBiome(builder, BiomePalette.PLAINS,
-                new elevation[] {elevation.MIDLAND, elevation.LOWLAND, elevation.HIGHLAND},
-                null,
-                null,
-                new treeCoverage[]{treeCoverage.NONE, treeCoverage.BARREN},
-                new moisture[] {moisture.MOIST, moisture.VERY_MOIST, moisture.SATURATED},
-                new boolean[] {false}
-        );
-
-        addBiome(builder, BiomePalette.JUNGLE,
-                new elevation[] {elevation.MIDLAND, elevation.LOWLAND},
-                new temperature[] {temperature.WARM, temperature.HOT},
-                null,
-                new treeCoverage[]{treeCoverage.FOREST, treeCoverage.DENSE, treeCoverage.RAINFOREST},
-                null,
-                new boolean[] {false}
-        );
-
-        addBiome(builder, BiomePalette.SAVANNA,
-                new elevation[] {elevation.MIDLAND, elevation.LOWLAND},
-                new temperature[] {temperature.WARM, temperature.HOT},
-                null,
-                new treeCoverage[]{treeCoverage.SPARSE},
-                null,
-                new boolean[] {false}
-        );
-
-        addBiome(builder, BiomePalette.FOREST_SPARSE,
-                new elevation[] {elevation.MIDLAND, elevation.LOWLAND},
-                new temperature[] {temperature.WARM, temperature.TEMPERATE},
-                null,
-                new treeCoverage[]{treeCoverage.SPARSE},
-                null,
-                new boolean[] {false}
-        );
-
-        addBiome(builder, BiomePalette.SWAMP,
-                new elevation[] {elevation.LOWLAND},
-                new temperature[] {temperature.WARM, temperature.HOT},
-                null,
-                new treeCoverage[]{treeCoverage.DENSE, treeCoverage.RAINFOREST},
-                null,
-                new boolean[] {false}
-        );
-
-
-        addBiome(builder, BiomePalette.FOREST,
-                new elevation[] {elevation.LOWLAND, elevation.MIDLAND},
-                new temperature[] {temperature.WARM, temperature.TEMPERATE},
-                null,
-                new treeCoverage[]{treeCoverage.DENSE, treeCoverage.FOREST},
-                null,
-                new boolean[] {false}
-        );
-
-        addBiome(builder, BiomePalette.TAIGA_SPARSE,
-                new elevation[] {elevation.LOWLAND, elevation.MIDLAND, elevation.MOUNTAIN},
-                new temperature[] {temperature.COOL, temperature.COLD},
-                null,
-                new treeCoverage[]{treeCoverage.SPARSE},
-                null,
-                new boolean[] {false}
-        );
-
-        addBiome(builder, BiomePalette.TAIGA,
-                new elevation[] {elevation.LOWLAND, elevation.MIDLAND, elevation.MOUNTAIN},
-                new temperature[] {temperature.COOL, temperature.COLD, temperature.FROZEN},
-                null,
-                new treeCoverage[]{treeCoverage.DENSE, treeCoverage.FOREST, treeCoverage.RAINFOREST},
-                null,
-                new boolean[] {false}
-        );
-
+        // Establish fallback (prefer vanilla ocean, else first registered biome)
+        Short oceanId = BIOME_TO_ID.get(ResourceLocation.withDefaultNamespace("ocean"));
+        fallbackBiomeId = oceanId != null ? oceanId : (short) (nextBiomeId > 1 ? 1 : 0);
 
         // Convert List<Short> values to short[] for cache-friendly access
         HashMap<climate, short[]> result = new HashMap<>(builder.size() * 2);
@@ -386,12 +211,135 @@ public final class BiomeClassifier {
             result.put(key, arr);
         });
         BIOME_MAP = result;
+        initialized = true;
         long elapsedMs = (System.nanoTime() - startTime) / 1_000_000;
-        LOG.info("BIOME_MAP built: {} entries in {} ms", BIOME_MAP.size(), elapsedMs);
+        LOG.info("BIOME_MAP built dynamically: {} biomes registered, {} climate entries in {} ms",
+                ID_TO_BIOME.size(), BIOME_MAP.size(), elapsedMs);
+    }
+
+    /**
+     * Classifies a single biome registry entry into the rule table by examining its
+     * Minecraft properties (temperature, downfall) and tags (IS_MOUNTAIN, IS_OCEAN, etc.).
+     */
+    private static void registerBiomeEntry(Map<climate, List<Short>> builder,
+                                           Holder.Reference<Biome> entry,
+                                           BlockPos samplePos) {
+        ResourceLocation id = entry.key().location();
+        Biome biome = entry.value();
+
+        // Allocate a short id and remember the mapping
+        short shortId = nextBiomeId++;
+        ID_TO_BIOME.put(shortId, id);
+        BIOME_TO_ID.put(id, shortId);
+
+        // --- Temperature mapping (vanilla baseTemperature -> our 6 buckets) ---
+        // Vanilla: <0 frozen (icy), 0-0.2 cold, 0.2-0.5 cool/temperate, 0.5-0.8 warm, >=0.8 hot.
+        float t = biome.getBaseTemperature();
+        temperature[] temps;
+        if (t < 0.0f)       temps = new temperature[]{temperature.FROZEN};
+        else if (t < 0.2f)  temps = new temperature[]{temperature.COLD};
+        else if (t < 0.5f)  temps = new temperature[]{temperature.COOL, temperature.TEMPERATE};
+        else if (t < 0.8f)  temps = new temperature[]{temperature.WARM};
+        else                temps = new temperature[]{temperature.HOT};
+
+        // --- Moisture / downfall mapping via accessor mixin ---
+        float downfall;
+        try {
+            Biome.ClimateSettings cs = ((BiomeAccessor) (Object) biome).terrainDiffusion$getClimateSettings();
+            downfall = cs != null ? cs.downfall() : 0.4f;
+        } catch (Throwable th) {
+            // Defensive: if the accessor mixin failed to apply, fall back to a neutral value
+            downfall = biome.hasPrecipitation() ? 0.5f : 0.1f;
+        }
+
+        moisture[] moists;
+        if (downfall < 0.15f)       moists = new moisture[]{moisture.VERY_DRY, moisture.DRY};
+        else if (downfall < 0.30f)  moists = new moisture[]{moisture.DRY, moisture.SEMI_DRY};
+        else if (downfall < 0.55f)  moists = new moisture[]{moisture.SEMI_DRY, moisture.MOIST};
+        else if (downfall < 0.80f)  moists = new moisture[]{moisture.MOIST, moisture.VERY_MOIST};
+        else                        moists = new moisture[]{moisture.VERY_MOIST, moisture.SATURATED};
+
+        // --- Tag-based elevation / slope inference ---
+        boolean isMountain = entry.is(BiomeTags.IS_MOUNTAIN) || entry.is(BiomeTags.IS_HILL);
+        boolean isOcean    = entry.is(BiomeTags.IS_OCEAN) || entry.is(BiomeTags.IS_DEEP_OCEAN);
+        boolean isDeep     = entry.is(BiomeTags.IS_DEEP_OCEAN);
+        boolean isForest   = entry.is(BiomeTags.IS_FOREST);
+        boolean isJungle   = entry.is(BiomeTags.IS_JUNGLE);
+        boolean isTaiga    = entry.is(BiomeTags.IS_TAIGA);
+        boolean isSavanna  = entry.is(BiomeTags.IS_SAVANNA);
+        boolean isBadlands = entry.is(BiomeTags.IS_BADLANDS);
+
+        elevation[] elevs;
+        slope[] slopes;
+        if (isDeep) {
+            elevs  = new elevation[]{elevation.DEEP_OCEAN};
+            slopes = new slope[]{slope.NONE};
+        } else if (isOcean) {
+            elevs  = new elevation[]{elevation.OCEAN};
+            slopes = new slope[]{slope.NONE};
+        } else if (isMountain) {
+            elevs  = new elevation[]{elevation.HIGHLAND, elevation.MOUNTAIN};
+            slopes = new slope[]{slope.MEDIUM, slope.BARE};
+        } else {
+            elevs  = new elevation[]{elevation.LOWLAND, elevation.MIDLAND};
+            slopes = new slope[]{slope.NONE, slope.MEDIUM};
+        }
+
+        // --- Tree coverage inference from tags ---
+        treeCoverage[] cover;
+        if (isJungle)         cover = new treeCoverage[]{treeCoverage.DENSE, treeCoverage.RAINFOREST};
+        else if (isForest)    cover = new treeCoverage[]{treeCoverage.FOREST, treeCoverage.DENSE};
+        else if (isTaiga)     cover = new treeCoverage[]{treeCoverage.FOREST, treeCoverage.DENSE};
+        else if (isSavanna)   cover = new treeCoverage[]{treeCoverage.SPARSE};
+        else if (isBadlands)  cover = new treeCoverage[]{treeCoverage.BARREN, treeCoverage.NONE};
+        else                  cover = null; // "don't care"
+
+        // --- Snow flag ---
+        // 1.21.1: Biome#coldEnoughToSnow(BlockPos) is the public guard used by precipitation logic.
+        boolean canSnow = biome.coldEnoughToSnow(samplePos);
+        boolean[] snow = canSnow ? new boolean[]{true} : new boolean[]{false};
+
+        // --- Modded namespace heuristics (e.g. "meadow", "swamp", "dune") ---
+        String ns = id.getNamespace();
+        if (!"minecraft".equals(ns)) {
+            String path = id.getPath();
+            if (path.contains("meadow") || path.contains("plain") || path.contains("field")) {
+                if (cover == null) cover = new treeCoverage[]{treeCoverage.NONE, treeCoverage.SPARSE};
+            } else if (path.contains("desert") || path.contains("dune")) {
+                cover = new treeCoverage[]{treeCoverage.BARREN, treeCoverage.NONE};
+            } else if (path.contains("swamp") || path.contains("marsh") || path.contains("bog")) {
+                cover = new treeCoverage[]{treeCoverage.DENSE, treeCoverage.RAINFOREST};
+                if (moists[0].ordinal() < moisture.MOIST.ordinal()) {
+                    moists = new moisture[]{moisture.VERY_MOIST, moisture.SATURATED};
+                }
+            }
+            LOG.debug("Registered modded biome {} (id={}) t={} downfall={}", id, shortId, t, downfall);
+        }
+
+        // Expand into the climate-tuple rule table via the existing combinatorial helper.
+        addBiome(builder, shortId, elevs, temps, slopes, cover, moists, snow);
+    }
+
+    /** Lookup the Minecraft ResourceLocation for a classifier short id, or null if unknown. */
+    public static ResourceLocation getBiomeId(short id) {
+        return ID_TO_BIOME.get(id);
+    }
+
+    /** Lookup the classifier short id for a Minecraft ResourceLocation, or the fallback id. */
+    public static short getShortId(ResourceLocation id) {
+        return BIOME_TO_ID.getOrDefault(id, fallbackBiomeId);
+    }
+
+    /** True once {@link #initializeDynamic(HolderLookup.Provider)} has populated BIOME_MAP. */
+    public static boolean isInitialized() {
+        return initialized;
     }
 
     /**
      * Classify biomes for a grid of pixels.
+     *
+     * <p>Requires {@link #initializeDynamic(HolderLookup.Provider)} to have been called;
+     * otherwise the BIOME_MAP is empty and every pixel falls through to the fallback id.
      *
      * @param elev       elevation in meters, (H, W) row-major
      * @param climate    climate data (5, H, W) row-major or null
@@ -406,7 +354,8 @@ public final class BiomeClassifier {
     public static short[] classify(float[] elev, float[] climate, int i0, int j0,
                                     float[] elevPadded, int H, int W, float pixelSizeM) {
         short[] out = new short[H * W];
-        for (int i = 0; i < H * W; i++) out[i] = BiomePalette.OCEAN;
+        final short fallback = fallbackBiomeId;
+        for (int i = 0; i < H * W; i++) out[i] = fallback;
 
         if (climate == null || climate.length < 4 * H * W) {
             return out;
@@ -569,14 +518,15 @@ public final class BiomeClassifier {
                 BiomeClassifier.climate climateResult = new climate(Elev, Temp, Slope, Cover, Moisture, hasSnow);
 
 
-                // Look up matching biomes and randomize based on cell noise
+                // Look up matching biomes and randomize based on cell noise.
+                // Multiple biomes (vanilla + modded) sharing the same climate tuple are
+                // distributed via the warped Voronoi/cell noise, preserving the original behavior.
                 short[] biomes = BIOME_MAP.get(climateResult);
-                out[idx] = (biomes != null) ? biomes[0] : BiomePalette.OCEAN;
                 if (biomes == null || biomes.length == 0) {
-                    //using ocean for a fallback as its more obvious when there's a null condition
-                    //may seem counterintuitive but im doing this so i know where i need to fix
-                    //rather than just cover it up
-                    out[idx] = BiomePalette.OCEAN;
+                    // No matching biome registered for this climate tuple.
+                    // Use the fallback (vanilla ocean if available) — clearly visible so
+                    // missing combinations can be diagnosed rather than silently masked.
+                    out[idx] = fallback;
                 }
                 else if (biomes.length == 1) {
                     out[idx] = biomes[0];

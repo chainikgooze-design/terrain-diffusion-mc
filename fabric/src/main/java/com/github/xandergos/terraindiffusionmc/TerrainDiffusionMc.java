@@ -21,7 +21,9 @@ public class TerrainDiffusionMc implements ModInitializer {
         TerrainDiffusionLifecycle.registerDensityFunctionCodecs((id, codec) -> Registry.register(BuiltInRegistries.DENSITY_FUNCTION_TYPE, id, codec));
         TerrainDiffusionLifecycle.bootstrap(FabricLoader.getInstance().getConfigDir(), FabricLoader.getInstance().getGameDir());
 
-        ServerLifecycleEvents.SERVER_STARTING.register(server -> TerrainDiffusionLifecycle.onServerStarting());
+        // SERVER_STARTING fires after the dynamic registries are populated, which is when
+        // BiomeClassifier#initializeDynamic can safely scan all biomes (vanilla + mods).
+        ServerLifecycleEvents.SERVER_STARTING.register(server -> TerrainDiffusionLifecycle.onServerStarting(server));
         ServerWorldEvents.LOAD.register((server, world) -> TerrainDiffusionLifecycle.onWorldLoad(world));
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> TerrainDiffusionLifecycle.onServerStopping());
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> TerrainDiffusionLifecycle.registerCommands(dispatcher));

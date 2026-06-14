@@ -1,6 +1,7 @@
 package com.github.xandergos.terraindiffusionmc;
 
 import com.github.xandergos.terraindiffusionmc.explorer.ExplorerServer;
+import com.github.xandergos.terraindiffusionmc.pipeline.BiomeClassifier;
 import com.github.xandergos.terraindiffusionmc.pipeline.LocalTerrainProvider;
 import com.github.xandergos.terraindiffusionmc.platform.PlatformPaths;
 import com.github.xandergos.terraindiffusionmc.pipeline.ModelAssetManager;
@@ -16,6 +17,7 @@ import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.BiomeSource;
@@ -81,9 +83,16 @@ public final class TerrainDiffusionLifecycle {
 
     /**
      * Called by each loader when the server is starting.
+     * Receives the server so we can access the live registries (vanilla + modded)
+     * to build the dynamic biome classification table.
      */
-    public static void onServerStarting() {
+    public static void onServerStarting(MinecraftServer server) {
         LocalTerrainProvider.clearCache();
+        try {
+            BiomeClassifier.initializeDynamic(server.registryAccess());
+        } catch (Throwable t) {
+            LOG.error("Failed to initialize dynamic biome classifier", t);
+        }
     }
 
     /**

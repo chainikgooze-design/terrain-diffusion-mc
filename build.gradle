@@ -2,15 +2,14 @@ plugins {
     // see https://fabricmc.net/develop/ for new versions
     id 'fabric-loom' version '1.13-SNAPSHOT' apply false
     // see https://projects.neoforged.net/neoforged/moddevgradle for new versions
-    id 'net.neoforged.moddev' version '2.0.123' apply false
+    //id 'net.neoforged.moddev' version '2.0.123' apply false
     id 'org.spongepowered.mixin' version '0.7-SNAPSHOT' apply false
 }
 
 ext {
-    terrainDiffusionLoaderProjects = ['fabric', 'neoforge']
+    terrainDiffusionLoaderProjects = ['fabric']
     terrainDiffusionLoaderDisplayNames = [
-            fabric  : 'Fabric',
-            neoforge: 'NeoForge'
+            fabric  : 'Fabric'
     ]
     terrainDiffusionBuildVariants = [
             windows: [taskSuffix: 'Windows', propertyName: 'useDml', legacyTaskSuffix: 'Dml', displayName: 'Windows', runtimeName: 'DirectML'],

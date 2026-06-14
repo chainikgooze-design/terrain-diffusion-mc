@@ -40,7 +40,7 @@ public class TerrainDiffusionMc {
     }
 
     private void onServerStarting(ServerStartingEvent event) {
-        TerrainDiffusionLifecycle.onServerStarting();
+        TerrainDiffusionLifecycle.onServerStarting(event.getServer());
     }
 
     private void onLevelLoad(LevelEvent.Load event) {
