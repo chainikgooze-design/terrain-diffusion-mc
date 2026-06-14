@@ -3,6 +3,16 @@ plugins {
     id 'fabric-loom'
     id 'maven-publish'
 }
+// Вручную прописываем то, что он потерял
+project.ext.mod_id = "terrain-diffusion-mc"
+project.ext.mod_name = "Terrain Diffusion"
+project.ext.java_version = "21"
+
+// Помогаем плагину 'base' найти имя архива
+base {
+    archivesName = "terrain-diffusion-mc-common"
+}
+
 
 def buildVariant = project.ext.terrainDiffusionBuildVariant
 

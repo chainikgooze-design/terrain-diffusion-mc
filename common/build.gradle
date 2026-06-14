@@ -2,7 +2,6 @@ plugins {
     id 'multiloader-common'
     id 'net.neoforged.moddev'
 }
-
 neoForge {
     neoFormVersion = neo_form_version
     // Automatically enable AccessTransformers if the file exists
@@ -15,7 +14,6 @@ neoForge {
         mappingsVersion = parchment_version
     }
 }
-
 repositories {
     maven { name = 'TerrainDiffusionLocalDml'; url = uri(rootProject.ext.terrainDiffusionLocalDmlMavenUrl()) }
     mavenCentral()

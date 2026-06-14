@@ -1,42 +1,25 @@
 pluginManagement {
+    resolutionStrategy {
+        eachPlugin {
+            // Если игра просит плагин миксинов
+            if (requested.id.id == 'org.spongepowered.mixin') {
+                // Говорим: используй наш локальный модуль вместо поиска маркера в сети
+                useModule("org.spongepowered:mixingradle:${requested.version}")
+            }
+            // На всякий случай добавим и для NeoForge, если он упадет следующим
+            if (requested.id.id == 'net.neoforged.moddev') {
+                useModule("net.neoforged:moddev-gradle:${requested.version}")
+            }
+        }
+    }
     repositories {
+        // Наш локальный мавен
+        maven { url = uri("local-repo") }
+
         gradlePluginPortal()
         mavenCentral()
-        exclusiveContent {
-            forRepository {
-                maven {
-                    name = 'Fabric'
-                    url = uri('https://maven.fabricmc.net')
-                }
-            }
-            filter {
-                includeGroup('net.fabricmc')
-                includeGroup('net.fabricmc.unpick')
-                includeGroup('fabric-loom')
-            }
-        }
-        exclusiveContent {
-            forRepository {
-                maven {
-                    name = 'Sponge'
-                    url = uri('https://repo.spongepowered.org/repository/maven-public')
-                }
-            }
-            filter {
-                includeGroupAndSubgroups('org.spongepowered')
-            }
-        }
-        exclusiveContent {
-            forRepository {
-                maven {
-                    name = 'NeoForge'
-                    url = uri('https://maven.neoforged.net/releases')
-                }
-            }
-            filter {
-                includeGroupAndSubgroups('net.neoforged')
-            }
-        }
+        maven { url = uri('https://maven.fabricmc.net') }
+        maven { url = uri('https://maven.neoforged.net/releases') }
     }
 }
 
@@ -47,4 +30,4 @@ plugins {
 rootProject.name = 'terrain-diffusion-mc'
 include('common')
 include('fabric')
-//include('neoforge')
+include('neoforge')

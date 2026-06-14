@@ -1,15 +1,16 @@
 plugins {
     // see https://fabricmc.net/develop/ for new versions
-    id 'fabric-loom' version '1.13-SNAPSHOT' apply false
+    id 'fabric-loom' version '1.9.2' apply false
     // see https://projects.neoforged.net/neoforged/moddevgradle for new versions
-    //id 'net.neoforged.moddev' version '2.0.123' apply false
+    id 'net.neoforged.moddev' version '2.0.141' apply false
     id 'org.spongepowered.mixin' version '0.7-SNAPSHOT' apply false
 }
 
 ext {
-    terrainDiffusionLoaderProjects = ['fabric']
+    terrainDiffusionLoaderProjects = ['fabric', 'neoforge']
     terrainDiffusionLoaderDisplayNames = [
-            fabric  : 'Fabric'
+            fabric  : 'Fabric',
+            neoforge: 'NeoForge'
     ]
     terrainDiffusionBuildVariants = [
             windows: [taskSuffix: 'Windows', propertyName: 'useDml', legacyTaskSuffix: 'Dml', displayName: 'Windows', runtimeName: 'DirectML'],
@@ -171,13 +172,13 @@ rootProject.ext.terrainDiffusionLoaderProjects.each { String loaderName ->
     }
 }
 
-tasks.named('buildCuda') { mustRunAfter rootProject.tasks.named('buildCpu') }
-tasks.named('buildWindows') { mustRunAfter rootProject.tasks.named('buildCuda') }
-['Fabric', 'NeoForge'].each { loaderTaskNamePart ->
-    tasks.named("build${loaderTaskNamePart}Cuda") { mustRunAfter rootProject.tasks.named("build${loaderTaskNamePart}Cpu") }
-    tasks.named("build${loaderTaskNamePart}Windows") { mustRunAfter rootProject.tasks.named("build${loaderTaskNamePart}Cuda") }
+//tasks.named('buildCuda') { mustRunAfter rootProject.tasks.named('buildCpu') }
+//tasks.named('buildWindows') { mustRunAfter rootProject.tasks.named('buildCuda') }
+/*['Fabric', 'NeoForge'].each { loaderTaskNamePart ->
+    //tasks.named("build${loaderTaskNamePart}Cuda") { mustRunAfter rootProject.tasks.named("build${loaderTaskNamePart}Cpu") }
+    //tasks.named("build${loaderTaskNamePart}Windows") { mustRunAfter rootProject.tasks.named("build${loaderTaskNamePart}Cuda") }
 }
-
+*/
 tasks.register('buildAllVariants') {
     group = terrainDiffusionBuildTaskGroup
     description = 'Builds CPU, CUDA, and Windows variants for Fabric and NeoForge.'
