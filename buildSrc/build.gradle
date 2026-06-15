@@ -9,6 +9,8 @@ repositories {
 }
 
 dependencies {
+    // fabric-loom: groupId:artifactId совпадает с plugin marker
     implementation 'net.fabricmc:fabric-loom:1.9.2'
-    implementation 'net.neoforged.moddev:net.neoforged.moddev.gradle.plugin:2.0.141'
+    // moddev-gradle: правильный artifact (не plugin marker, а сам jar)
+    implementation 'net.neoforged:moddev-gradle:2.0.141'
 }

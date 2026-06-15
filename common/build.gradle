@@ -16,6 +16,7 @@ neoForge {
 }
 repositories {
     maven { name = 'TerrainDiffusionLocalDml'; url = uri(rootProject.ext.terrainDiffusionLocalDmlMavenUrl()) }
+    mavenLocal()
     mavenCentral()
 }
 

@@ -1,15 +1,13 @@
 pluginManagement {
     resolutionStrategy {
         eachPlugin {
-            // Если игра просит плагин миксинов
+            // Mixin-плагин не публикует plugin marker в Maven —
+            // перенаправляем запрос на реальный jar из local-repo
             if (requested.id.id == 'org.spongepowered.mixin') {
-                // Говорим: используй наш локальный модуль вместо поиска маркера в сети
                 useModule("org.spongepowered:mixingradle:${requested.version}")
             }
-            // На всякий случай добавим и для NeoForge, если он упадет следующим
-            if (requested.id.id == 'net.neoforged.moddev') {
-                useModule("net.neoforged:moddev-gradle:${requested.version}")
-            }
+            // net.neoforged.moddev и fabric-loom загружаются через buildSrc classpath,
+            // поэтому перехватывать их здесь не нужно — Gradle найдёт их сам.
         }
     }
     repositories {
