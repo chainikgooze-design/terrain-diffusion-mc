@@ -9,6 +9,7 @@
   "license": "MIT",
   "icon": "assets/terrain-diffusion-mc/icon.png",
   "environment": "*",
+  "accessWidener": "terrain-diffusion-mc.accesswidener",
   "entrypoints": {
     "fabric-datagen": [
       "com.github.xandergos.terraindiffusionmc.client.TerrainDiffusionMcDataGenerator"

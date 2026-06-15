@@ -1,0 +1,5 @@
+accessWidener v2 named
+
+# Expose Biome$ClimateSettings so BiomeAccessor (@Mixin @Accessor) can reference
+# the type in its method signature during common compile-time.
+accessible class net/minecraft/world/level/biome/Biome$ClimateSettings

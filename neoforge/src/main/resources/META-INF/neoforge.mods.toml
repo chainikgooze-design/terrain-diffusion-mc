@@ -1,6 +1,7 @@
 modLoader="javafml"
 loaderVersion="${neoforge_loader_version_range}"
 license="${license}"
+accessTransformer="META-INF/accesstransformer.cfg"
 issueTrackerURL=""
 
 [[mods]]
