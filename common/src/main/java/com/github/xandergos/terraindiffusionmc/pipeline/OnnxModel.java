@@ -16,6 +16,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -42,6 +43,23 @@ public final class OnnxModel implements AutoCloseable {
     private static final Object GPU_SLOT_LOCK = new Object();
     private static OnnxModel gpuSlotHolder = null;
     private static OrtSession activeGpuSession = null;
+
+    /**
+     * Global serialization gate for every native ONNX inference. Minecraft's chunk
+     * generation runs on a thread pool (Worker-Main-N); multiple workers can request
+     * tiles at once and each {@code session.run()} allocates its own GPU workspace.
+     * Concurrent runs on the shared session (or across the three models) each reserve
+     * VRAM simultaneously and can push the card over its limit → OOM crash.
+     *
+     * <p>This fair 1-permit semaphore is the single chokepoint through which every
+     * native {@code session.run()} passes (CPU and GPU), so exactly one inference
+     * executes at a time and waiting workers queue instead of running in parallel.
+     * Fair mode hands the permit to the longest-waiting caller, which keeps burst
+     * chunk-gen requests ordered rather than starved. It is global (not per-model)
+     * because a single full region inference uses coarse → base → decoder in sequence
+     * and only one session should occupy the GPU at any instant.
+     */
+    private static final Semaphore INFERENCE_GATE = new Semaphore(1, true);
 
     private final OrtEnvironment env;
     private final byte[] optimizedModelBytes;
@@ -357,7 +375,29 @@ public final class OnnxModel implements AutoCloseable {
         }
     }
 
+    /**
+     * Runs one native inference, serialized behind {@link #INFERENCE_GATE}.
+     *
+     * <p>This is the single point every model call (coarse, base, decoder; CPU or
+     * GPU) funnels through. Acquiring the 1-permit gate guarantees that no two
+     * {@code session.run()} calls overlap, so the GPU only ever performs one
+     * inference at a time and its per-run workspace allocations never stack up.
+     */
     private static float[] runWithSession(OrtSession session, Object[][] inputs) {
+        try {
+            INFERENCE_GATE.acquire();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while waiting for the terrain-diffusion inference gate", e);
+        }
+        try {
+            return runWithSessionLocked(session, inputs);
+        } finally {
+            INFERENCE_GATE.release();
+        }
+    }
+
+    private static float[] runWithSessionLocked(OrtSession session, Object[][] inputs) {
         Map<String, OnnxTensor> feed = new LinkedHashMap<>();
         OrtEnvironment env = OrtEnvironment.getEnvironment();
         try {
