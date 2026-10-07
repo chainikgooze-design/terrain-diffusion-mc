@@ -88,7 +88,22 @@ sourceSets {
         compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
         runtimeClasspath += output + compileClasspath
     }
+    test {
+        java.srcDir 'src/test/java'
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += output + compileClasspath + sourceSets.main.runtimeClasspath
+    }
 }
+
+// Durable regression gate: proves native ONNX inference is serialized to at most
+// one concurrent run, preventing VRAM OOM from overlapping session.run() calls.
+tasks.register('inferenceGateTest', JavaExec) {
+    group = 'verification'
+    description = 'Runs the ONNX inference serialization regression test.'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.github.xandergos.terraindiffusionmc.pipeline.InferenceGateSerializationTest'
+}
+tasks.named('check') { dependsOn 'inferenceGateTest' }
 
 configurations {
     commonJava {
