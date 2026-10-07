@@ -1,6 +1,8 @@
 package com.github.xandergos.terraindiffusionmc.pipeline;
 
+import com.github.xandergos.terraindiffusionmc.config.TerrainDiffusionConfig;
 import com.github.xandergos.terraindiffusionmc.infinitetensor.FloatTensor;
+import com.github.xandergos.terraindiffusionmc.world.HeightConverter;
 import com.github.xandergos.terraindiffusionmc.world.WorldScaleManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -83,6 +85,47 @@ public final class LocalTerrainProvider {
         t.setDaemon(true);
         return t;
     });
+
+    // =========================================================================
+    // Coarse (macro) sampling
+    // -------------------------------------------------------------------------
+    // Single-column height/biome queries (structure placement, getBaseHeight,
+    // getFirstFreeHeight, spawn selection, getNoiseBiome) read ONLY the coarse
+    // map. They never trigger the base/decoder pipeline, which is strictly
+    // reserved for the full-res chunk block generation path (fillArray). This
+    // keeps startup responsive: hundreds of one-off macro queries reuse cheap
+    // cached coarse tiles instead of each running the full 256-block decode.
+    // =========================================================================
+
+    /** Coarse-map macro sample for one block column (no base/decoder inference). */
+    public record CoarseSample(float elevationMeters, float temperature, float precipitation) {}
+
+    /** Native pixels per coarse-map pixel (matches WorldPipeline coarse spacing). */
+    private static final int COARSE_TO_NATIVE = 32 * WorldPipeline.LATENT_COMPRESSION;
+
+    /** Coarse grid cache keyed by coarse slice bounds (scale-derived, so scale-safe). */
+    private static final Map<CacheKey, CoarseGrid> COARSE_CACHE = new ConcurrentHashMap<>();
+    private static final Map<CacheKey, Future<CoarseGrid>> COARSE_PENDING = new ConcurrentHashMap<>();
+
+    /** Immutable coarse tile grid extracted from a coarse slice; safe to share across threads. */
+    private static final class CoarseGrid {
+        final int ci0, cj0;
+        final int rows, cols;
+        final float[][] elevationMeters;
+        final float[][] temperature;
+        final float[][] precipitation;
+
+        CoarseGrid(int ci0, int cj0, int rows, int cols,
+                   float[][] elevationMeters, float[][] temperature, float[][] precipitation) {
+            this.ci0 = ci0;
+            this.cj0 = cj0;
+            this.rows = rows;
+            this.cols = cols;
+            this.elevationMeters = elevationMeters;
+            this.temperature = temperature;
+            this.precipitation = precipitation;
+        }
+    }
 
     private static volatile LocalTerrainProvider INSTANCE;
     private static long instanceSeed;
@@ -183,6 +226,118 @@ public final class LocalTerrainProvider {
 
     private static <T> T submitToInferenceThread(Callable<T> task) throws Exception {
         return INFERENCE_EXECUTOR.submit(task).get();
+    }
+
+    // =========================================================================
+    // Coarse (macro) query API — height/biome for a single block column.
+    // These read only the cached coarse map and are cheap; they never start the
+    // base/decoder pipeline. Use them for structure placement, spawn selection,
+    // getBaseHeight/getFirstFreeHeight, and getNoiseBiome.
+    // =========================================================================
+
+    /**
+     * Coarse-only block height (Minecraft block Y) for a single column.
+     * Bilinearly interpolated from the coarse elevation map. Never runs the full pipeline.
+     */
+    public static int getCoarseHeight(int blockX, int blockZ) {
+        CoarseSample sample = getInstance().sampleCoarse(blockX, blockZ);
+        int scale = WorldScaleManager.getCurrentScale();
+        return HeightConverter.convertToMinecraftHeight((short) Math.round(sample.elevationMeters()), scale);
+    }
+
+    /**
+     * Coarse-only climate/elevation sample for a single column (macro query).
+     * Returns temperature (C), precipitation (mm) and physical elevation (m),
+     * bilinearly interpolated from the coarse map. Never runs the full pipeline.
+     */
+    public static CoarseSample getCoarseSample(int blockX, int blockZ) {
+        return getInstance().sampleCoarse(blockX, blockZ);
+    }
+
+    private CoarseSample sampleCoarse(int blockX, int blockZ) {
+        CoarseGrid grid = coarseGridForTile(blockX, blockZ);
+        int scale = WorldScaleManager.getCurrentScale();
+        int blocksPerCoarse = COARSE_TO_NATIVE * scale;
+
+        double fz = (double) blockZ / blocksPerCoarse - Math.floor((double) blockZ / blocksPerCoarse);
+        double fx = (double) blockX / blocksPerCoarse - Math.floor((double) blockX / blocksPerCoarse);
+        int ci = Math.floorDiv(blockZ, blocksPerCoarse);
+        int cj = Math.floorDiv(blockX, blocksPerCoarse);
+        int r0 = Math.max(0, Math.min(grid.rows - 2, ci - grid.ci0));
+        int c0 = Math.max(0, Math.min(grid.cols - 2, cj - grid.cj0));
+
+        return new CoarseSample(
+                bilerp(grid.elevationMeters, r0, c0, fz, fx),
+                bilerp(grid.temperature,     r0, c0, fz, fx),
+                bilerp(grid.precipitation,   r0, c0, fz, fx));
+    }
+
+    private CoarseGrid coarseGridForTile(int blockI, int blockJ) {
+        int scale = WorldScaleManager.getCurrentScale();
+        int tileSize = TerrainDiffusionConfig.tileSize();
+        int shift = Integer.numberOfTrailingZeros(tileSize);
+        int i1 = (blockI >> shift) << shift;
+        int j1 = (blockJ >> shift) << shift;
+        int i2 = i1 + tileSize;
+        int j2 = j1 + tileSize;
+
+        int blocksPerCoarse = COARSE_TO_NATIVE * scale;
+        // 1-pixel border on each side so bilinear taps are always inside the grid.
+        int ci0 = Math.floorDiv(i1, blocksPerCoarse) - 1;
+        int cj0 = Math.floorDiv(j1, blocksPerCoarse) - 1;
+        int ci1 = -Math.floorDiv(-i2, blocksPerCoarse) + 1;
+        int cj1 = -Math.floorDiv(-j2, blocksPerCoarse) + 1;
+
+        CacheKey key = new CacheKey(ci0, cj0, ci1, cj1);
+        CoarseGrid cached = COARSE_CACHE.get(key);
+        if (cached != null) return cached;
+
+        FutureTask<CoarseGrid> task = new FutureTask<>(() -> {
+            FloatTensor slice = pipeline.getCoarseSlice(ci0, cj0, ci1, cj1);
+            int rows = ci1 - ci0, cols = cj1 - cj0, n = rows * cols;
+            float[][] elev   = new float[rows][cols];
+            float[][] temp   = new float[rows][cols];
+            float[][] precip = new float[rows][cols];
+            for (int r = 0; r < rows; r++) {
+                for (int c = 0; c < cols; c++) {
+                    int idx = r * cols + c;
+                    float w = slice.data[6 * n + idx];
+                    if (w <= 1e-6f) {
+                        elev[r][c] = 0f; temp[r][c] = 0f; precip[r][c] = 0f;
+                        continue;
+                    }
+                    float v0 = slice.data[idx] / w;              // channel 0: signed-sqrt elev
+                    elev[r][c] = Math.signum(v0) * v0 * v0;      // undo signed sqrt -> metres
+                    temp[r][c]   = slice.data[2 * n + idx] / w;  // channel 2: temperature
+                    precip[r][c] = slice.data[4 * n + idx] / w;  // channel 4: precipitation
+                }
+            }
+            CoarseGrid grid = new CoarseGrid(ci0, cj0, rows, cols, elev, temp, precip);
+            COARSE_CACHE.put(key, grid);
+            COARSE_PENDING.remove(key);
+            return grid;
+        });
+
+        Future<CoarseGrid> existing = COARSE_PENDING.putIfAbsent(key, task);
+        FutureTask<CoarseGrid> toRun = (existing == null) ? task : (FutureTask<CoarseGrid>) existing;
+        if (existing == null) INFERENCE_EXECUTOR.submit(toRun);
+        try {
+            return toRun.get();
+        } catch (Exception e) {
+            COARSE_PENDING.remove(key);
+            throw new RuntimeException("Coarse sample failed: " + key, e);
+        }
+    }
+
+    private static float bilerp(float[][] g, int r0, int c0, double fz, double fx) {
+        float a = g[r0][c0];
+        float b = g[r0][c0 + 1];
+        float c = g[r0 + 1][c0];
+        float d = g[r0 + 1][c0 + 1];
+        return (float) (a * (1 - fz) * (1 - fx)
+                + b * (1 - fz) * fx
+                + c * fz * (1 - fx)
+                + d * fz * fx);
     }
 
     /**

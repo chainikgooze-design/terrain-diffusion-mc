@@ -1,8 +1,6 @@
 package com.github.xandergos.terraindiffusionmc.world;
 
-import com.github.xandergos.terraindiffusionmc.config.TerrainDiffusionConfig;
 import com.github.xandergos.terraindiffusionmc.pipeline.LocalTerrainProvider;
-import com.github.xandergos.terraindiffusionmc.pipeline.LocalTerrainProvider.HeightmapData;
 import com.mojang.serialization.Codec;
 import net.minecraft.util.KeyDispatchDataCodec;
 import net.minecraft.world.level.biome.Climate;
@@ -49,11 +47,6 @@ public final class AIToVanillaClimateSampler {
     private static final float[] ELEV_M         = {-1000f, -250f, -50f, 0f, 300f, 1500f, 4000f, 9000f};
     private static final float[] CONTINENT_PARAM = {-1f, -0.6f, -0.3f, -0.2f, 0.1f, 0.4f, 0.8f, 0.95f};
 
-    // Cached last tile so repeated per-column sampling does not re-lookup the cache.
-    private int cachedTileX = Integer.MIN_VALUE;
-    private int cachedTileZ = Integer.MIN_VALUE;
-    private HeightmapData cachedData;
-
     /**
      * Builds the vanilla {@link Climate.Sampler} that feeds the AI climate into the
      * MultiNoiseBiomeSource. The returned record holds the six density functions consumed
@@ -76,59 +69,25 @@ public final class AIToVanillaClimateSampler {
     }
 
     /**
-     * Reads the cached AI tile at the given block coordinates and returns the mapped
+     * Reads the cached AI climate at the given block coordinates and returns the mapped
      * vanilla climate parameter for {@code axis} in [-1, 1].
+     *
+     * <p>MACRO-QUERY: this feeds {@code getNoiseBiome}. It is sampled block-by-block by the
+     * MultiNoiseBiomeSource, so it reads the cheap cached coarse map (bilinear interpolation)
+     * and NEVER triggers the full base+decoder pipeline.
      */
     private double sampleAxis(int blockX, int blockZ, Axis axis) {
-        HeightmapData data = fetchTile(blockX, blockZ);
-        if (data == null || data.temperature == null) {
-            // No cached AI data yet; return a safe mid/neutral value so we never fall
-            // into a void (MultiNoise always selects *some* viable biome).
-            return 0.0;
-        }
-
-        int localX = Math.max(0, Math.min(data.width - 1, blockX - tileStartX(blockX)));
-        int localZ = Math.max(0, Math.min(data.height - 1, blockZ - tileStartZ(blockZ)));
-
+        LocalTerrainProvider.CoarseSample sample = LocalTerrainProvider.getCoarseSample(blockX, blockZ);
         switch (axis) {
             case TEMPERATURE:
-                return remap(data.temperature[localZ][localX], TEMP_C, TEMP_PARAM);
+                return remap(sample.temperature(), TEMP_C, TEMP_PARAM);
             case HUMIDITY:
-                return remap(data.precipitation[localZ][localX], PRECIP_MM, HUMIDITY_PARAM);
+                return remap(sample.precipitation(), PRECIP_MM, HUMIDITY_PARAM);
             case CONTINENTALNESS:
-                return remap(data.elevationMeters[localZ][localX], ELEV_M, CONTINENT_PARAM);
+                return remap(sample.elevationMeters(), ELEV_M, CONTINENT_PARAM);
             default:
                 return 0.0;
         }
-    }
-
-    // ------------------------------------------------------------------
-    // Tile lookup
-    // ------------------------------------------------------------------
-
-    private HeightmapData fetchTile(int blockX, int blockZ) {
-        int tileX = tileStartX(blockX);
-        int tileZ = tileStartZ(blockZ);
-        HeightmapData data = cachedData;
-        if (data == null || cachedTileX != tileX || cachedTileZ != tileZ) {
-            int tileSize = TerrainDiffusionConfig.tileSize();
-            data = LocalTerrainProvider.getInstance()
-                    .fetchHeightmap(tileZ, tileX, tileZ + tileSize, tileX + tileSize);
-            cachedTileX = tileX;
-            cachedTileZ = tileZ;
-            cachedData = data;
-        }
-        return data;
-    }
-
-    private static int tileStartX(int blockX) {
-        int tileSize = TerrainDiffusionConfig.tileSize();
-        int shift = Integer.numberOfTrailingZeros(tileSize);
-        return (blockX >> shift) << shift;
-    }
-
-    private static int tileStartZ(int blockZ) {
-        return tileStartX(blockZ); // same computation for the Z axis
     }
 
     // ------------------------------------------------------------------

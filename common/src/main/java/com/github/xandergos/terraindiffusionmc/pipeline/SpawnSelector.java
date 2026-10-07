@@ -2,7 +2,6 @@ package com.github.xandergos.terraindiffusionmc.pipeline;
 
 import com.github.xandergos.terraindiffusionmc.config.TerrainDiffusionConfig;
 import com.github.xandergos.terraindiffusionmc.infinitetensor.FloatTensor;
-import com.github.xandergos.terraindiffusionmc.world.HeightConverter;
 import com.github.xandergos.terraindiffusionmc.world.WorldScaleManager;
 import net.minecraft.core.BlockPos;
 import org.slf4j.Logger;
@@ -72,15 +71,13 @@ public final class SpawnSelector {
 
     /**
      * Returns the Minecraft block Y for the given block (X, Z), clamped to at least 64.
-     * Falls back to 64 if the heightmap cannot be fetched.
+     * Falls back to 64 if the coarse height cannot be fetched.
      */
     private static int heightmapY(int blockX, int blockZ) {
         try {
-            LocalTerrainProvider.HeightmapData data =
-                    LocalTerrainProvider.getInstance().fetchHeightmap(blockZ, blockX, blockZ + 1, blockX + 1);
-            return Math.max(HeightConverter.convertToMinecraftHeight(data.heightmap[0][0]), 64);
+            return Math.max(LocalTerrainProvider.getCoarseHeight(blockX, blockZ), 64);
         } catch (Exception e) {
-            LOG.error("SpawnSelector: failed to fetch heightmap at ({}, {})", blockX, blockZ, e);
+            LOG.error("SpawnSelector: failed to fetch coarse height at ({}, {})", blockX, blockZ, e);
             return 64;
         }
     }

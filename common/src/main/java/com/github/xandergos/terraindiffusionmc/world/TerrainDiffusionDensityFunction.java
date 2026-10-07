@@ -22,32 +22,11 @@ public class TerrainDiffusionDensityFunction implements DensityFunction {
         int z = pos.blockZ();
         int y = pos.blockY();
 
-        int tileSize = TerrainDiffusionConfig.tileSize();
-        int tileShift = Integer.numberOfTrailingZeros(tileSize);
-
-        int tileX = x >> tileShift;
-        int tileZ = z >> tileShift;
-
-        int blockStartX = tileX << tileShift;
-        int blockStartZ = tileZ << tileShift;
-
-        int blockEndX = blockStartX + tileSize;
-        int blockEndZ = blockStartZ + tileSize;
-
-        HeightmapData data = LocalTerrainProvider.getInstance()
-                .fetchHeightmap(blockStartZ, blockStartX, blockEndZ, blockEndX);
-
-        if (data == null || data.heightmap == null) {
-            return 0.0;
-        }
-
-        int localX = Math.max(0, Math.min(data.width - 1, x - blockStartX));
-        int localZ = Math.max(0, Math.min(data.height - 1, z - blockStartZ));
-
-        int targetHeight = HeightConverter.convertToMinecraftHeight(
-                data.heightmap[localZ][localX]
-        );
-
+        // MACRO-QUERY: single-column height for structure placement / getBaseHeight /
+        // getFirstFreeHeight. These are called hundreds of times during startup and only
+        // need approximate terrain height, so they read the cheap cached coarse map
+        // (bilinear interpolation) and NEVER trigger the full base+decoder pipeline.
+        int targetHeight = LocalTerrainProvider.getCoarseHeight(x, z);
         return targetHeight - y;
     }
 
