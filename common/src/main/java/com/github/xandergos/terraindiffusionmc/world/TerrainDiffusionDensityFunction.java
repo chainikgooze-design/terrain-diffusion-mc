@@ -22,11 +22,32 @@ public class TerrainDiffusionDensityFunction implements DensityFunction {
         int z = pos.blockZ();
         int y = pos.blockY();
 
-        // MACRO-QUERY: single-column height for structure placement / getBaseHeight /
-        // getFirstFreeHeight. These are called hundreds of times during startup and only
-        // need approximate terrain height, so they read the cheap cached coarse map
-        // (bilinear interpolation) and NEVER trigger the full base+decoder pipeline.
-        int targetHeight = LocalTerrainProvider.getCoarseHeight(x, z);
+        int tileSize = TerrainDiffusionConfig.tileSize();
+        int tileShift = Integer.numberOfTrailingZeros(tileSize);
+        int tileX = x >> tileShift;
+        int tileZ = z >> tileShift;
+        int blockStartX = tileX << tileShift;
+        int blockStartZ = tileZ << tileShift;
+        int blockEndX = blockStartX + tileSize;
+        int blockEndZ = blockStartZ + tileSize;
+
+        // FAST PATH (Smart check): If high-res data is already loaded by fillArray,
+        // use it. This guarantees the DensityFunction contract is perfectly
+        // maintained for surface rules (grass, trees, features).
+        HeightmapData data = LocalTerrainProvider.getInstance()
+                .getIfCached(blockStartZ, blockStartX, blockEndZ, blockEndX);
+
+        int targetHeight;
+        if (data != null && data.heightmap != null) {
+            int localX = Math.max(0, Math.min(data.width  - 1, x - blockStartX));
+            int localZ = Math.max(0, Math.min(data.height - 1, z - blockStartZ));
+            targetHeight = HeightConverter.convertToMinecraftHeight(data.heightmap[localZ][localX]);
+        } else {
+            // MACRO-QUERY PATH: Distant structure placement probe. Data isn't
+            // cached, so return coarse height instantly to prevent server timeouts.
+            targetHeight = LocalTerrainProvider.getCoarseHeight(x, z);
+        }
+
         return targetHeight - y;
     }
 

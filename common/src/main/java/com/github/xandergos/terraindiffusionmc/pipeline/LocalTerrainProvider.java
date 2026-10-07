@@ -357,6 +357,23 @@ public final class LocalTerrainProvider {
         return this.genHeightmap(key, i1, j1, i2, j2);
     }
 
+    /**
+     * Non-blocking lookup of a previously generated heightmap region.
+     * Returns the cached {@link HeightmapData} if the exact region is already in
+     * memory, or {@code null} if it has not been generated yet. This must never
+     * trigger inference, so it is safe to call from the DensityFunction {@code compute()}
+     * fast path during chunk block generation without stalling the server.
+     */
+    public HeightmapData getIfCached(int i1, int j1, int i2, int j2) {
+        CacheKey key = new CacheKey(i1, j1, i2, j2);
+        CacheEntry cached = CACHE.get(key);
+        if (cached != null) {
+            cached.lastAccessed.set(CACHE_CLOCK.incrementAndGet());
+            return cached.data;
+        }
+        return null;
+    }
+
     private HeightmapData genHeightmap(CacheKey key, int i1, int j1, int i2, int j2) {
         int scale = WorldScaleManager.getCurrentScale();
         FutureTask<HeightmapData> task = new FutureTask<>(() -> {
