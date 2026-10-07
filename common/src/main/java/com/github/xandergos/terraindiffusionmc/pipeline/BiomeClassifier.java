@@ -21,7 +21,14 @@ import java.util.Map;
  *
  * <p>Uses fixed-seed FastNoiseLite instances for climate and elevation noise perturbations.
  * Biome IDs match the Python server's _BIOME_ID mapping.
+ *
+ * <p><b>DEPRECATED - world generation no longer resolves biomes through this rule table.</b>
+ * Biomes are now selected by the vanilla {@code MultiNoiseBiomeSource} driven by
+ * {@link com.github.xandergos.terraindiffusionmc.world.AIToVanillaClimateSampler}.
+ * This class is retained only to keep producing legacy biome ids for the external
+ * terrain explorer UI; it must not be used to drive block-level biome decisions.
  */
+@Deprecated
 public final class BiomeClassifier {
     private static final Logger LOG = LoggerFactory.getLogger(BiomeClassifier.class);
     // Fixed-seed noise instances (matching Python's module-level _TEMP_NOISE etc.)

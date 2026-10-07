@@ -2,7 +2,7 @@ plugins {
     id 'multiloader-loader'
     id 'net.neoforged.moddev'
 }
-
+evaluationDependsOn(':common')
 neoForge {
     version = neoforge_version
     // Automatically enable neoforge AccessTransformers if the file exists
@@ -44,22 +44,38 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 
 
-// Implement mcgradleconventions loader attribute
-def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
-['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements'].each { variant ->
-    configurations.named("$variant") {
-        attributes {
-            attribute(loaderAttribute, 'neoforge')
-        }
+// --- ПРАВИЛА СОВМЕСТИМОСТИ GRADLE ---
+def loaderAttr = Attribute.of('io.github.mcgradleconventions.loader', String)
+def envAttr = Attribute.of('net.fabricmc.loom.environment', Named)
+
+class LoaderRule implements org.gradle.api.attributes.AttributeCompatibilityRule<String> {
+    void execute(org.gradle.api.attributes.CompatibilityCheckDetails<String> details) {
+        if (details.producerValue == 'common') details.compatible()
     }
 }
-sourceSets.configureEach {
-    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName, it.getTaskName(null, 'jarJar')].each { variant->
-        configurations.named("$variant") {
-            attributes {
-                attribute(loaderAttribute, 'neoforge')
-            }
-        }
+class EnvRule implements org.gradle.api.attributes.AttributeCompatibilityRule<Named> {
+    void execute(org.gradle.api.attributes.CompatibilityCheckDetails<Named> details) {
+        if (details.producerValue.name == 'common') details.compatible()
     }
 }
 
+dependencies.attributesSchema {
+    attribute(loaderAttr) { compatibilityRules.add(LoaderRule) }
+    attribute(envAttr) { compatibilityRules.add(EnvRule) }
+}
+
+// --- СТАНДАРТНЫЕ АТРИБУТЫ NEOFORGE ---
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+configurations.configureEach { conf ->
+    if (conf.name in ['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements']) {
+        conf.attributes { attribute(loaderAttribute, 'neoforge') }
+    }
+}
+sourceSets.configureEach { srcSet ->
+    def configNames = [srcSet.compileClasspathConfigurationName, srcSet.runtimeClasspathConfigurationName, srcSet.getTaskName(null, 'jarJar')]
+    configurations.configureEach { conf ->
+        if (conf.name in configNames) {
+            conf.attributes { attribute(loaderAttribute, 'neoforge') }
+        }
+    }
+}

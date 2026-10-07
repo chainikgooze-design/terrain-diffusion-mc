@@ -1,6 +1,11 @@
 plugins {
-    id 'multiloader-common'
+    id 'java-library'
+    id 'maven-publish'
     id 'net.neoforged.moddev'
+}
+
+base {
+    archivesName = "${mod_id}-${project.name}-${minecraft_version}"
 }
 neoForge {
     neoFormVersion = neo_form_version
@@ -14,20 +19,58 @@ neoForge {
         mappingsVersion = parchment_version
     }
 }
+
+def terrainDiffusionJavaVersion = (findProperty('java_version') ?: rootProject.findProperty('java_version') ?: '21') as Integer
+
+extensions.configure(org.gradle.api.plugins.JavaPluginExtension) { org.gradle.api.plugins.JavaPluginExtension javaExtension ->
+    javaExtension.toolchain.languageVersion.set(org.gradle.jvm.toolchain.JavaLanguageVersion.of(terrainDiffusionJavaVersion))
+    javaExtension.withSourcesJar()
+    javaExtension.withJavadocJar()
+}
+
 repositories {
-    maven { name = 'TerrainDiffusionLocalDml'; url = uri(rootProject.ext.terrainDiffusionLocalDmlMavenUrl()) }
-    mavenLocal()
     mavenCentral()
+
+    // Надежное зеркало PaperMC вместо неработающего Sponge
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'PaperMCMirror'
+                url = 'https://repo.papermc.io/repository/maven-public/'
+            }
+        }
+        filter { includeGroupAndSubgroups('org.spongepowered') }
+    }
+
+    exclusiveContent {
+        forRepositories(
+                maven {
+                    name = 'ParchmentMC'
+                    url = 'https://maven.parchmentmc.org/'
+                },
+                maven {
+                    name = "NeoForge"
+                    url = 'https://maven.neoforged.net/releases'
+                }
+        )
+        filter { includeGroup('org.parchmentmc.data') }
+    }
+
+    maven {
+        name = 'BlameJared'
+        url = 'https://maven.blamejared.com'
+    }
 }
 
 dependencies {
     compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
-    // fabric and neoforge both bundle mixinextras, so it is safe to use it in common
     compileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
     annotationProcessor group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
     compileOnly "com.microsoft.onnxruntime:onnxruntime:${rootProject.ext.terrainDiffusionOnnxRuntimeVersion}"
     compileOnly "com.microsoft.onnxruntime:onnxruntime_gpu:${rootProject.ext.terrainDiffusionOnnxRuntimeVersion}"
-    compileOnly rootProject.ext.terrainDiffusionOnnxNotation('windows')
+
+    // СТАВИМ ДВА СЛЕША, ЧТОБЫ ОТРУБИТЬ ЭТУ СТРОКУ:
+    // compileOnly rootProject.ext.terrainDiffusionOnnxNotation('windows')
 }
 
 sourceSets {
@@ -68,21 +111,35 @@ artifacts {
     commonResources sourceSets.main.resources.sourceDirectories.singleFile
 }
 
-// Implement mcgradleconventions loader attribute
-def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+// --- КАПАБИЛИТИ COMMON ---
+// Loader-проекты (:fabric, :neoforge) подключают :common через capability
+// "$group:$mod_id" (см. multiloader-loader.gradle). Без объявления этих
+// capabilities на исходящих вариантах Gradle падает с
+// "Unable to find a variant with the requested capability".
 ['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements'].each { variant ->
-    configurations.named("$variant") {
-        attributes {
-            attribute(loaderAttribute, 'common')
-        }
+    configurations."$variant".outgoing {
+        capability("$group:${project.name}:$version")
+        capability("$group:${base.archivesName.get()}:$version")
+        capability("$group:$mod_id-${project.name}-${minecraft_version}:$version")
+        capability("$group:$mod_id:$version")
+    }
+    publishing.publications.configureEach {
+        suppressPomMetadataWarningsFor(variant)
     }
 }
-sourceSets.configureEach {
-    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant->
-        configurations.named("$variant") {
-            attributes {
-                attribute(loaderAttribute, 'common')
-            }
+
+// --- СТАНДАРТНЫЕ АТРИБУТЫ COMMON ---
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+configurations.configureEach { conf ->
+    if (conf.name in ['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements']) {
+        conf.attributes { attribute(loaderAttribute, 'common') }
+    }
+}
+sourceSets.configureEach { srcSet ->
+    def configNames = [srcSet.compileClasspathConfigurationName, srcSet.runtimeClasspathConfigurationName]
+    configurations.configureEach { conf ->
+        if (conf.name in configNames) {
+            conf.attributes { attribute(loaderAttribute, 'common') }
         }
     }
 }

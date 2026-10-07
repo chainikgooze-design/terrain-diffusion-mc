@@ -1,9 +1,17 @@
+buildscript {
+    repositories {
+        mavenCentral()
+        maven { url 'https://lss233.littleservice.cn/repositories/minecraft/' }
+    }
+    dependencies {
+        classpath 'org.spongepowered:mixingradle:0.7-SNAPSHOT'
+    }
+}
 plugins {
     // Версии зафиксированы в buildSrc/build.gradle — здесь указывать version нельзя,
     // иначе Gradle упадёт с "plugin already on classpath with an unknown version".
     id 'fabric-loom' apply false
     id 'net.neoforged.moddev' apply false
-    id 'org.spongepowered.mixin' version '0.7-SNAPSHOT' apply false
 }
 
 ext {

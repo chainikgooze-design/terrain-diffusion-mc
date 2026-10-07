@@ -3,6 +3,7 @@ plugins {
     id 'fabric-loom'
     id 'maven-publish'
 }
+evaluationDependsOn(':common')
 // Вручную прописываем то, что он потерял
 project.ext.mod_id = "terrain-diffusion-mc"
 project.ext.mod_name = "Terrain Diffusion"
@@ -116,8 +117,9 @@ tasks.withType(JavaExec).configureEach {
 
 publishing {
     publications {
-        named('mavenJava', MavenPublication) {
-            artifactId = project.archives_base_name
+        register('mavenJava', MavenPublication) {
+            artifactId = base.archivesName.get()
+            from components.java
         }
     }
     repositories {
@@ -131,28 +133,45 @@ tasks.register('pipelineTest', JavaExec) {
     jvmArgs '-Xmx8g'
 }
 
-// Implement mcgradleconventions loader attribute
+// --- ПРАВИЛА СОВМЕСТИМОСТИ GRADLE ---
+def loaderAttr = Attribute.of('io.github.mcgradleconventions.loader', String)
+def envAttr = Attribute.of('net.fabricmc.loom.environment', Named)
+
+class LoaderRule implements org.gradle.api.attributes.AttributeCompatibilityRule<String> {
+    void execute(org.gradle.api.attributes.CompatibilityCheckDetails<String> details) {
+        if (details.producerValue == 'common') details.compatible()
+    }
+}
+class EnvRule implements org.gradle.api.attributes.AttributeCompatibilityRule<Named> {
+    void execute(org.gradle.api.attributes.CompatibilityCheckDetails<Named> details) {
+        if (details.producerValue.name == 'common') details.compatible()
+    }
+}
+
+dependencies.attributesSchema {
+    attribute(loaderAttr) { compatibilityRules.add(LoaderRule) }
+    attribute(envAttr) { compatibilityRules.add(EnvRule) }
+}
+
+// --- СТАНДАРТНЫЕ АТРИБУТЫ FABRIC ---
 def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
-['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements', 'includeInternal', 'modCompileClasspath'].each { variant ->
-    configurations.named("$variant") {
-        attributes {
-            attribute(loaderAttribute, 'fabric')
+configurations.configureEach { conf ->
+    if (conf.name in ['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements', 'includeInternal', 'modCompileClasspath']) {
+        conf.attributes { attribute(loaderAttribute, 'fabric') }
+    }
+}
+sourceSets.configureEach { srcSet ->
+    def configNames = [srcSet.compileClasspathConfigurationName, srcSet.runtimeClasspathConfigurationName]
+    configurations.configureEach { conf ->
+        if (conf.name in configNames) {
+            conf.attributes { attribute(loaderAttribute, 'fabric') }
         }
     }
 }
-sourceSets.configureEach {
-    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant->
-        configurations.named("$variant") {
-            attributes {
-                attribute(loaderAttribute, 'fabric')
-            }
-        }
-    }
-}
-loom.remapConfigurations.configureEach {
-    configurations.named(it.name) {
-        attributes {
-            attribute(loaderAttribute, 'fabric')
+loom.remapConfigurations.configureEach { remapConf ->
+    configurations.configureEach { conf ->
+        if (conf.name == remapConf.name) {
+            conf.attributes { attribute(loaderAttribute, 'fabric') }
         }
     }
 }

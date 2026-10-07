@@ -1,5 +1,12 @@
 package com.github.xandergos.terraindiffusionmc.pipeline;
 
+/**
+ * @deprecated Legacy short biome-id palette from the hardcoded classifier. World
+ *             generation now resolves biomes through the vanilla
+ *             {@code MultiNoiseBiomeSource} + {@code AIToVanillaClimateSampler};
+ *             this palette is kept only for the terrain explorer UI.
+ */
+@Deprecated
 public final class BiomePalette {
 
     static final short PLAINS   = 1,

@@ -1,7 +1,7 @@
 plugins {
     id 'multiloader-common'
+    id 'java-library'
 }
-
 sourceSets {
     main {
         java.srcDir project(':common').file('src/main/java')

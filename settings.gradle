@@ -1,21 +1,24 @@
 pluginManagement {
     resolutionStrategy {
         eachPlugin {
-            // Mixin-плагин не публикует plugin marker в Maven —
-            // перенаправляем запрос на реальный jar из local-repo
             if (requested.id.id == 'org.spongepowered.mixin') {
                 useModule("org.spongepowered:mixingradle:${requested.version}")
             }
-            // net.neoforged.moddev и fabric-loom загружаются через buildSrc classpath,
-            // поэтому перехватывать их здесь не нужно — Gradle найдёт их сам.
         }
     }
+
     repositories {
-        maven { url = 'https://repo.spongepowered.org/repository/maven-public/' }
-        maven { url = 'https://maven.fabricmc.net/' }
-        maven { url = 'https://maven.neoforged.net/releases' }
         gradlePluginPortal()
         mavenCentral()
+
+        // Надежное зеркало от PaperMC, работает по HTTPS и без блокировок
+        maven {
+            name = 'PaperMCMirror'
+            url = 'https://repo.papermc.io/repository/maven-public/'
+        }
+
+        maven { url = 'https://maven.fabricmc.net/' }
+        maven { url = 'https://maven.neoforged.net/releases' }
     }
 }
 

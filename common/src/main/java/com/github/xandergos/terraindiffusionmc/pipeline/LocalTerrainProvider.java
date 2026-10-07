@@ -47,14 +47,25 @@ public final class LocalTerrainProvider {
     public static final class HeightmapData {
         public final short[][] heightmap;
         public final short[][] biomeIds;
+        /** AI temperature in degrees Celsius per terrain column. */
+        public final float[][] temperature;
+        /** AI precipitation in millimetres per terrain column. */
+        public final float[][] precipitation;
+        /** AI elevation in (physical) metres per terrain column, matching {@link #heightmap}. */
+        public final float[][] elevationMeters;
         public final int width;
         public final int height;
 
-        public HeightmapData(short[][] heightmap, short[][] biomeIds, int width, int height) {
-            this.heightmap = heightmap;
-            this.biomeIds  = biomeIds;
-            this.width     = width;
-            this.height    = height;
+        public HeightmapData(short[][] heightmap, short[][] biomeIds,
+                             float[][] temperature, float[][] precipitation,
+                             float[][] elevationMeters, int width, int height) {
+            this.heightmap       = heightmap;
+            this.biomeIds        = biomeIds;
+            this.temperature     = temperature;
+            this.precipitation   = precipitation;
+            this.elevationMeters = elevationMeters;
+            this.width           = width;
+            this.height          = height;
         }
     }
 
@@ -253,7 +264,7 @@ public final class LocalTerrainProvider {
         float[] climate  = out[1];
 
         short[] biomeFlat = BiomeClassifier.classify(elevFlat, climate, i1, j1, elevPadded, H, W, NATIVE_RESOLUTION);
-        return buildHeightmapData(elevFlat, biomeFlat, H, W);
+        return buildHeightmapData(elevFlat, biomeFlat, climate, H, W);
     }
 
     // =========================================================================
@@ -299,7 +310,7 @@ public final class LocalTerrainProvider {
         float[] elevOut = addElevationNoise(elevSmooth, elevPadded, i1, j1, H, W, pixelSizeM);
 
         short[] biomeFlat = BiomeClassifier.classify(elevSmooth, climate, i1, j1, elevPadded, H, W, pixelSizeM);
-        return buildHeightmapData(elevOut, biomeFlat, H, W);
+        return buildHeightmapData(elevOut, biomeFlat, climate, H, W);
     }
 
     // =========================================================================
@@ -385,15 +396,29 @@ public final class LocalTerrainProvider {
         return a;
     }
 
-    private static HeightmapData buildHeightmapData(float[] elevFlat, short[] biomeFlat, int H, int W) {
+    private static HeightmapData buildHeightmapData(float[] elevFlat, short[] biomeFlat, float[] climate, int H, int W) {
         short[][] heightmap = new short[H][W];
         short[][] biomeIds  = new short[H][W];
+        float[][] elevationMeters = new float[H][W];
+        float[][] temperature     = new float[H][W];
+        float[][] precipitation   = new float[H][W];
+
+        boolean hasClimate = climate != null && climate.length >= 3 * H * W;
         for (int r = 0; r < H; r++)
             for (int c = 0; c < W; c++) {
-                float e = elevFlat[r * W + c];
+                int idx = r * W + c;
+                float e = elevFlat[idx];
                 heightmap[r][c] = (short) Math.max(-32768, Math.min(32767, (int) Math.floor(e)));
-                biomeIds[r][c]  = biomeFlat[r * W + c];
+                biomeIds[r][c]  = biomeFlat == null ? 0 : biomeFlat[idx];
+                elevationMeters[r][c] = e;
+                if (hasClimate) {
+                    // Climate layout: channel 0 = temperature (C), channel 2 = precipitation (mm).
+                    temperature[r][c]   = climate[idx];
+                    precipitation[r][c] = climate[2 * H * W + idx];
+                }
             }
-        return new HeightmapData(heightmap, biomeIds, W, H);
+        // Legacy (explorer/back-compat) biome ids are kept; world-gen biomes are
+        // now resolved through the vanilla MultiNoiseBiomeSource (see AIToVanillaClimateSampler).
+        return new HeightmapData(heightmap, biomeIds, temperature, precipitation, elevationMeters, W, H);
     }
 }
