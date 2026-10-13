@@ -16,6 +16,21 @@ public class TerrainDiffusionDensityFunction implements DensityFunction {
     public static final TerrainDiffusionDensityFunction INSTANCE =
             new TerrainDiffusionDensityFunction();
 
+    private boolean isMacroQuery() {
+        StackTraceElement[] stack = Thread.currentThread().getStackTrace();
+        // Check the last few callers to see if it's structure placement or spawn finding
+        for (int i = 2; i < Math.min(stack.length, 15); i++) {
+            String cls = stack[i].getClassName();
+            String mth = stack[i].getMethodName();
+            if (cls.contains("Structure") || cls.contains("Spawn") || cls.contains("placement") ||
+                mth.contains("getBaseHeight") || mth.contains("getFirstFreeHeight") ||
+                mth.contains("getNoiseBiome")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     public double compute(DensityFunction.FunctionContext pos) {
         int x = pos.blockX();
@@ -31,22 +46,24 @@ public class TerrainDiffusionDensityFunction implements DensityFunction {
         int blockEndX = blockStartX + tileSize;
         int blockEndZ = blockStartZ + tileSize;
 
-        // FAST PATH (Smart check): If high-res data is already loaded by fillArray,
-        // use it. This guarantees the DensityFunction contract is perfectly
-        // maintained for surface rules (grass, trees, features).
         HeightmapData data = LocalTerrainProvider.getInstance()
                 .getIfCached(blockStartZ, blockStartX, blockEndZ, blockEndX);
 
-        int targetHeight;
-        if (data != null && data.heightmap != null) {
-            int localX = Math.max(0, Math.min(data.width  - 1, x - blockStartX));
-            int localZ = Math.max(0, Math.min(data.height - 1, z - blockStartZ));
-            targetHeight = HeightConverter.convertToMinecraftHeight(data.heightmap[localZ][localX]);
-        } else {
-            // MACRO-QUERY PATH: Distant structure placement probe. Data isn't
-            // cached, so return coarse height instantly to prevent server timeouts.
-            targetHeight = LocalTerrainProvider.getCoarseHeight(x, z);
+        // SMART CACHE MISS RESOLVER:
+        if (data == null || data.heightmap == null) {
+            if (isMacroQuery()) {
+                // It's a genuine structure/spawn probe. Use fast coarse map.
+                return LocalTerrainProvider.getCoarseHeight(x, z) - y;
+            }
+            // It's actual physical chunk generation, but it missed the cache.
+            // FORCE the GPU to generate the high-res map to prevent chunk walls.
+            data = LocalTerrainProvider.getInstance()
+                    .fetchHeightmap(blockStartZ, blockStartX, blockEndZ, blockEndX);
         }
+
+        int localX = Math.max(0, Math.min(data.width  - 1, x - blockStartX));
+        int localZ = Math.max(0, Math.min(data.height - 1, z - blockStartZ));
+        int targetHeight = HeightConverter.convertToMinecraftHeight(data.heightmap[localZ][localX]);
 
         return targetHeight - y;
     }
