@@ -299,6 +299,14 @@ public final class OnnxModel implements AutoCloseable {
             try { activeGpuSession.close(); } catch (OrtException ignored) {}
             activeGpuSession = null;
             gpuSlotHolder = null;
+
+            // Force memory cleanup and give the GPU driver time to flush VRAM
+            System.gc();
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
 
         try {
