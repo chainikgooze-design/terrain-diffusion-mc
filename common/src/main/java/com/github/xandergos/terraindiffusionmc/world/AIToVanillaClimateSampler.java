@@ -1,6 +1,7 @@
 package com.github.xandergos.terraindiffusionmc.world;
 
 import com.github.xandergos.terraindiffusionmc.config.TerrainDiffusionConfig;
+import com.github.xandergos.terraindiffusionmc.pipeline.FastNoiseLite;
 import com.github.xandergos.terraindiffusionmc.pipeline.LocalTerrainProvider;
 import com.mojang.serialization.Codec;
 import net.minecraft.util.KeyDispatchDataCodec;
@@ -19,8 +20,10 @@ import java.util.List;
  * {@link DensityFunction}s plus a spawn-target list, so this class no longer implements
  * the sampler directly. Instead it exposes {@link #buildSampler()} which constructs a
  * {@link Climate.Sampler} whose density functions read the cached AI arrays (temperature,
- * humidity, continentalness) and return values in [-1, 1]. Erosion, depth and weirdness are
- * left neutral (0). Because the pixels are still resolved through the vanilla MultiNoise
+ * humidity, continentalness) and return values in [-1, 1]. Erosion and weirdness are driven
+ * by smooth low-frequency Perlin noise (see {@code EROSION_NOISE} / {@code WEIRDNESS_NOISE})
+ * so the full MultiNoise biome space is unlocked; depth stays neutral (0). Because the
+ * pixels are still resolved through the vanilla MultiNoise
  * machinery, datapack biomes and NEOFORGE biome modifier geologies (ores, vegetation) work
  * natively.
  *
@@ -48,6 +51,26 @@ public final class AIToVanillaClimateSampler {
     private static final float[] ELEV_M         = {-1000f, -250f, -50f, 0f, 300f, 1500f, 4000f, 9000f};
     private static final float[] CONTINENT_PARAM = {-1f, -0.6f, -0.3f, -0.2f, 0.1f, 0.4f, 0.8f, 0.95f};
 
+    // ------------------------------------------------------------------
+    // Erosion / Weirdness noise generators.
+    //
+    // These were previously hardcoded to DensityFunctions.zero(), which collapsed the
+    // MultiNoise biome space into elevation-based contour "strips" and prevented custom
+    // datapack biomes (e.g. Nature's Spirit) from ever spawning, since they require varied
+    // Erosion and Weirdness. We now feed smooth Perlin noise in [-1, 1] at low frequencies
+    // so the full 3D MultiNoise space is unlocked.
+    // ------------------------------------------------------------------
+
+    private static final FastNoiseLite EROSION_NOISE = new FastNoiseLite(1111);
+    private static final FastNoiseLite WEIRDNESS_NOISE = new FastNoiseLite(2222);
+
+    static {
+        EROSION_NOISE.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
+        EROSION_NOISE.SetFrequency(0.001f);
+        WEIRDNESS_NOISE.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
+        WEIRDNESS_NOISE.SetFrequency(0.0008f);
+    }
+
     /**
      * Builds the vanilla {@link Climate.Sampler} that feeds the AI climate into the
      * MultiNoiseBiomeSource. The returned record holds the six density functions consumed
@@ -58,9 +81,9 @@ public final class AIToVanillaClimateSampler {
                 aiFunction(Axis.TEMPERATURE),
                 aiFunction(Axis.HUMIDITY),
                 aiFunction(Axis.CONTINENTALNESS),
-                DensityFunctions.zero(), // erosion: neutral
-                DensityFunctions.zero(), // depth: neutral
-                DensityFunctions.zero(), // weirdness: neutral
+                new NoiseClimateFunction(EROSION_NOISE), // erosion is now dynamic
+                DensityFunctions.zero(), // depth remains neutral (mostly impacts caves)
+                new NoiseClimateFunction(WEIRDNESS_NOISE), // weirdness is now dynamic
                 List.of() // no spawn target; findSpawnPosition() returns BlockPos.ZERO
         );
     }
@@ -177,6 +200,53 @@ public final class AIToVanillaClimateSampler {
         @Override
         public KeyDispatchDataCodec<? extends DensityFunction> codec() {
             return KeyDispatchDataCodec.of(Codec.unit(this).fieldOf("dummy"));
+        }
+    }
+
+    /**
+     * A runtime {@link DensityFunction} that returns smooth Perlin noise in [-1, 1] from a
+     * {@link FastNoiseLite} generator. It is used to provide dynamic Erosion and Weirdness
+     * for the MultiNoise biome sampler, unlocking the full 3D biome space for vanilla and
+     * custom datapack biomes. Because it is constructed at runtime and never round-trips
+     * through NBT, its codec is a dummy unit codec.
+     */
+    private final class NoiseClimateFunction implements DensityFunction {
+        private final FastNoiseLite noise;
+
+        NoiseClimateFunction(FastNoiseLite noise) {
+            this.noise = noise;
+        }
+
+        @Override
+        public double compute(DensityFunction.FunctionContext context) {
+            return noise.GetNoise(context.blockX(), context.blockZ());
+        }
+
+        @Override
+        public void fillArray(double[] array, DensityFunction.ContextProvider provider) {
+            for (int i = 0; i < array.length; i++) {
+                array[i] = this.compute(provider.forIndex(i));
+            }
+        }
+
+        @Override
+        public DensityFunction mapAll(DensityFunction.Visitor visitor) {
+            return this;
+        }
+
+        @Override
+        public double minValue() {
+            return -1.0;
+        }
+
+        @Override
+        public double maxValue() {
+            return 1.0;
+        }
+
+        @Override
+        public KeyDispatchDataCodec<? extends DensityFunction> codec() {
+            return KeyDispatchDataCodec.of(Codec.unit(this).fieldOf("dummy_noise"));
         }
     }
 }
