@@ -1,5 +1,6 @@
 package com.github.xandergos.terraindiffusionmc.world;
 
+import com.github.xandergos.terraindiffusionmc.config.TerrainDiffusionConfig;
 import com.github.xandergos.terraindiffusionmc.pipeline.LocalTerrainProvider;
 import com.mojang.serialization.Codec;
 import net.minecraft.util.KeyDispatchDataCodec;
@@ -77,16 +78,36 @@ public final class AIToVanillaClimateSampler {
      * and NEVER triggers the full base+decoder pipeline.
      */
     private double sampleAxis(int blockX, int blockZ, Axis axis) {
-        LocalTerrainProvider.CoarseSample sample = LocalTerrainProvider.getCoarseSample(blockX, blockZ);
+        int tileSize = TerrainDiffusionConfig.tileSize();
+        int tileShift = Integer.numberOfTrailingZeros(tileSize);
+        int blockStartX = (blockX >> tileShift) << tileShift;
+        int blockStartZ = (blockZ >> tileShift) << tileShift;
+        int blockEndX = blockStartX + tileSize;
+        int blockEndZ = blockStartZ + tileSize;
+
+        LocalTerrainProvider.HeightmapData data = LocalTerrainProvider.getInstance()
+                .getIfCached(blockStartZ, blockStartX, blockEndZ, blockEndX);
+
+        float temp, precip, elev;
+
+        if (data != null && data.temperature != null && data.precipitation != null && data.elevationMeters != null) {
+            int localX = Math.max(0, Math.min(data.width - 1, blockX - blockStartX));
+            int localZ = Math.max(0, Math.min(data.height - 1, blockZ - blockStartZ));
+            temp = data.temperature[localZ][localX];
+            precip = data.precipitation[localZ][localX];
+            elev = data.elevationMeters[localZ][localX];
+        } else {
+            LocalTerrainProvider.CoarseSample sample = LocalTerrainProvider.getCoarseSample(blockX, blockZ);
+            temp = sample.temperature();
+            precip = sample.precipitation();
+            elev = sample.elevationMeters();
+        }
+
         switch (axis) {
-            case TEMPERATURE:
-                return remap(sample.temperature(), TEMP_C, TEMP_PARAM);
-            case HUMIDITY:
-                return remap(sample.precipitation(), PRECIP_MM, HUMIDITY_PARAM);
-            case CONTINENTALNESS:
-                return remap(sample.elevationMeters(), ELEV_M, CONTINENT_PARAM);
-            default:
-                return 0.0;
+            case TEMPERATURE: return remap(temp, TEMP_C, TEMP_PARAM);
+            case HUMIDITY: return remap(precip, PRECIP_MM, HUMIDITY_PARAM);
+            case CONTINENTALNESS: return remap(elev, ELEV_M, CONTINENT_PARAM);
+            default: return 0.0;
         }
     }
 

@@ -18,13 +18,11 @@ public class TerrainDiffusionDensityFunction implements DensityFunction {
 
     private boolean isMacroQuery() {
         StackTraceElement[] stack = Thread.currentThread().getStackTrace();
-        // Check the last few callers to see if it's structure placement or spawn finding
         for (int i = 2; i < Math.min(stack.length, 15); i++) {
-            String cls = stack[i].getClassName();
             String mth = stack[i].getMethodName();
-            if (cls.contains("Structure") || cls.contains("Spawn") || cls.contains("placement") ||
-                mth.contains("getBaseHeight") || mth.contains("getFirstFreeHeight") ||
-                mth.contains("getNoiseBiome")) {
+            if (mth.equals("getBaseHeight") || mth.equals("getFirstFreeHeight") ||
+                mth.equals("getNoiseBiome") || mth.equals("findSpawnBlockPos") ||
+                mth.equals("locate")) {
                 return true;
             }
         }
