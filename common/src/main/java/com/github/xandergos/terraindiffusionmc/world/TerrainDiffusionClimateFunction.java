@@ -63,8 +63,8 @@ public final class TerrainDiffusionClimateFunction implements DensityFunction {
     // ------------------------------------------------------------------
     // Mapping anchors: AI value -> vanilla parameter in [-1.0, 1.0].
     // ------------------------------------------------------------------
-    private static final float[] TEMP_C         = {-20f, -10f, 0f, 10f, 15f, 20f, 26f, 35f, 45f};
-    private static final float[] TEMP_PARAM     = {-1f, -0.7f, -0.4f, -0.1f, 0.1f, 0.3f, 0.5f, 0.9f, 1f};
+    private static final float[] TEMP_C         = {-20f,   -10f,     0f,    10f,   15f,   20f,   28f,   36f,  45f};
+    private static final float[] TEMP_PARAM     = {-1.0f, -0.55f, -0.18f,  0.00f, 0.10f, 0.20f, 0.55f, 0.85f, 1.0f};
 
     private static final float[] PRECIP_MM      = {0f, 150f, 400f, 700f, 1100f, 1600f, 2200f, 3000f};
     private static final float[] HUMIDITY_PARAM = {-1f, -0.6f, -0.2f, 0.1f, 0.4f, 0.7f, 0.9f, 1f};
