@@ -15,7 +15,7 @@
   },
   "noise": {
     "min_y": -64,
-    "height": 2032,
+    "height": 464,
     "size_horizontal": 1,
     "size_vertical": 2
   },
@@ -30,7 +30,9 @@
     "erosion": 0,
     "depth": 0,
     "ridges": 0,
-    "initial_density_without_jaggedness": 0,
+    "initial_density_without_jaggedness": {
+      "type": "terrain-diffusion-mc:terrain_diffusion"
+    },
     "preliminary_surface_level": {
       "type": "terrain-diffusion-mc:terrain_diffusion"
     },
