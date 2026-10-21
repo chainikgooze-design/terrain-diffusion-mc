@@ -42,6 +42,31 @@ neoForge {
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
+// Expand the ${...} placeholders in neoforge.mods.toml so the shipped TOML is valid.
+// (Unlike the Fabric module, ModDevGradle does not auto-expand here after the rename.)
+processResources {
+    def trimProp = { String key -> project.property(key).toString().trim() }
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand(
+                'license'                     : trimProp('license'),
+                'fml_mod_id'                   : trimProp('fml_mod_id'),
+                'mod_id'                       : trimProp('mod_id'),
+                'version'                      : project.version.toString().trim(),
+                'mod_name'                     : trimProp('mod_name'),
+                'mod_author'                   : trimProp('mod_author'),
+                'credits'                      : trimProp('credits'),
+                'description'                  : trimProp('description'),
+                'neoforge_loader_version_range': trimProp('neoforge_loader_version_range'),
+                'minecraft_version_range'      : trimProp('minecraft_version_range')
+        )
+    }
+    filesMatching(['terrain-diffusion-mc.mixins.json',
+                   'terrain-diffusion-mc.client.mixins.json',
+                   'terrain-diffusion-mc.neoforge.mixins.json']) {
+        expand('mod_id': trimProp('mod_id'))
+    }
+}
+
 
 
 // --- ПРАВИЛА СОВМЕСТИМОСТИ GRADLE ---

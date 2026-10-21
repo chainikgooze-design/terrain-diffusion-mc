@@ -16,50 +16,28 @@ public class TerrainDiffusionDensityFunction implements DensityFunction {
     public static final TerrainDiffusionDensityFunction INSTANCE =
             new TerrainDiffusionDensityFunction();
 
-    private boolean isMacroQuery() {
-        StackTraceElement[] stack = Thread.currentThread().getStackTrace();
-        for (int i = 2; i < Math.min(stack.length, 15); i++) {
-            String mth = stack[i].getMethodName();
-            if (mth.equals("getBaseHeight") || mth.equals("getFirstFreeHeight") ||
-                mth.equals("getNoiseBiome") || mth.equals("findSpawnBlockPos") ||
-                mth.equals("locate")) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     @Override
     public double compute(DensityFunction.FunctionContext pos) {
         int x = pos.blockX();
         int z = pos.blockZ();
         int y = pos.blockY();
 
+        if (LocalTerrainProvider.isMacroQuery()) {
+            return LocalTerrainProvider.getCoarseHeight(x, z) - y;
+        }
+
         int tileSize = TerrainDiffusionConfig.tileSize();
         int tileShift = Integer.numberOfTrailingZeros(tileSize);
-        int tileX = x >> tileShift;
-        int tileZ = z >> tileShift;
-        int blockStartX = tileX << tileShift;
-        int blockStartZ = tileZ << tileShift;
+        int blockStartX = (x >> tileShift) << tileShift;
+        int blockStartZ = (z >> tileShift) << tileShift;
         int blockEndX = blockStartX + tileSize;
         int blockEndZ = blockStartZ + tileSize;
 
+        // FORCE high-res generation to ensure deterministic chunk borders
         HeightmapData data = LocalTerrainProvider.getInstance()
-                .getIfCached(blockStartZ, blockStartX, blockEndZ, blockEndX);
+                .fetchHeightmap(blockStartZ, blockStartX, blockEndZ, blockEndX);
 
-        // SMART CACHE MISS RESOLVER:
-        if (data == null || data.heightmap == null) {
-            if (isMacroQuery()) {
-                // It's a genuine structure/spawn probe. Use fast coarse map.
-                return LocalTerrainProvider.getCoarseHeight(x, z) - y;
-            }
-            // It's actual physical chunk generation, but it missed the cache.
-            // FORCE the GPU to generate the high-res map to prevent chunk walls.
-            data = LocalTerrainProvider.getInstance()
-                    .fetchHeightmap(blockStartZ, blockStartX, blockEndZ, blockEndX);
-        }
-
-        int localX = Math.max(0, Math.min(data.width  - 1, x - blockStartX));
+        int localX = Math.max(0, Math.min(data.width - 1, x - blockStartX));
         int localZ = Math.max(0, Math.min(data.height - 1, z - blockStartZ));
         int targetHeight = HeightConverter.convertToMinecraftHeight(data.heightmap[localZ][localX]);
 
