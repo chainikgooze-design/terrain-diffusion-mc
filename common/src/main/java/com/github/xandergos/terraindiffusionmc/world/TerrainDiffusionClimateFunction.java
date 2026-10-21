@@ -194,10 +194,17 @@ public final class TerrainDiffusionClimateFunction implements DensityFunction {
             elev = data.elevationMeters[localZ][localX];
         }
 
-        // Minecraft height lapse rate: cools down significantly on mountains (Y > 80)
-        // At Y=140: -0.21 (grove / snowy slopes); at Y=200: -0.42 (peaks / snow)
-        int effectiveY = Math.max(blockY, (int) Math.round(elev + 64));
-        float heightCooling = effectiveY > 80 ? (effectiveY - 80) * 0.0035f : 0.0f;
+        // Physical mountain cooling based on real elevation meters from the AI model (scale-invariant):
+        // - Hills & low mountains (< 1000m): 0.0 cooling. At scale 6 they form towering 200-block STONE cliffs (Stony Peaks / Windswept).
+        // - Mid-alpine slopes (1000m - 2200m): moderate cooling (0.0 to 0.30), allowing stony peaks in warm zones and pine groves in cool zones.
+        // - High alpine summits (> 2200m): cooling up to 0.50, forming snow caps (Snowy Slopes / Jagged Peaks) strictly on top.
+        float heightCooling = elev > 1000f ? Math.min(0.50f, (elev - 1000f) * 0.00030f) : 0.0f;
+
+        // Additional 3D cooling for samples high in the air above the surface (e.g. flying / sky)
+        int surfaceY = HeightConverter.convertToMinecraftHeight((short) Math.max(0, Math.round(elev)));
+        if (blockY > surfaceY) {
+            heightCooling += Math.min(0.25f, (blockY - surfaceY) * 0.003f);
+        }
 
         double value = 0.0;
         switch (axis) {
