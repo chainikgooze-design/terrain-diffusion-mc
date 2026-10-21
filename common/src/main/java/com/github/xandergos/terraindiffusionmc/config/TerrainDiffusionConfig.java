@@ -17,6 +17,7 @@ public final class TerrainDiffusionConfig {
     private static final boolean DEFAULT_VALIDATE_MODEL = true;
     private static final int DEFAULT_EXPLORER_PORT = 19801;
     private static final int DEFAULT_TILE_SIZE = 256;
+    private static final int DEFAULT_REGIONAL_CLIMATE_SCALE = 2000;
 
     static {
         loadDefaults();
@@ -63,6 +64,11 @@ public final class TerrainDiffusionConfig {
     /** Maximum coarse-pixel region size for spawn land search before giving up. */
     public static int spawnSearchMaxSize() {
         return readInt("spawn_search.max_size", 128);
+    }
+
+    /** Regional climate variation scale in blocks (smaller = more frequent biome transitions). */
+    public static int regionalClimateScale() {
+        return readInt("climate.regional_scale", DEFAULT_REGIONAL_CLIMATE_SCALE);
     }
 
     /** Region side length in blocks. Must be a positive power of 2 (128, 256, 512, ...). */

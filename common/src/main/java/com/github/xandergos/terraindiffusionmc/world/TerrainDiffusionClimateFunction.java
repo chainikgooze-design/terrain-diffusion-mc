@@ -76,8 +76,23 @@ public final class TerrainDiffusionClimateFunction implements DensityFunction {
     private static final FastNoiseLite WEIRDNESS_NOISE = new FastNoiseLite(2222);
     private static final FastNoiseLite TEMP_NOISE      = new FastNoiseLite(3333);
     private static final FastNoiseLite HUMIDITY_NOISE  = new FastNoiseLite(4444);
+    private static final FastNoiseLite REGIONAL_TEMP_NOISE     = new FastNoiseLite(5555);
+    private static final FastNoiseLite REGIONAL_HUMIDITY_NOISE = new FastNoiseLite(6666);
 
     static {
+        float regionalScale = (float) Math.max(500, TerrainDiffusionConfig.regionalClimateScale());
+        float regionalFreq = 1.0f / regionalScale;
+
+        REGIONAL_TEMP_NOISE.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
+        REGIONAL_TEMP_NOISE.SetFractalType(FastNoiseLite.FractalType.FBm);
+        REGIONAL_TEMP_NOISE.SetFractalOctaves(2);
+        REGIONAL_TEMP_NOISE.SetFrequency(regionalFreq);
+
+        REGIONAL_HUMIDITY_NOISE.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
+        REGIONAL_HUMIDITY_NOISE.SetFractalType(FastNoiseLite.FractalType.FBm);
+        REGIONAL_HUMIDITY_NOISE.SetFractalOctaves(2);
+        REGIONAL_HUMIDITY_NOISE.SetFrequency(regionalFreq);
+
         EROSION_NOISE.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
         EROSION_NOISE.SetFractalType(FastNoiseLite.FractalType.FBm);
         EROSION_NOISE.SetFractalOctaves(3);
@@ -91,12 +106,12 @@ public final class TerrainDiffusionClimateFunction implements DensityFunction {
         TEMP_NOISE.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
         TEMP_NOISE.SetFractalType(FastNoiseLite.FractalType.FBm);
         TEMP_NOISE.SetFractalOctaves(2);
-        TEMP_NOISE.SetFrequency(0.02f);
+        TEMP_NOISE.SetFrequency(0.01f);
 
         HUMIDITY_NOISE.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
         HUMIDITY_NOISE.SetFractalType(FastNoiseLite.FractalType.FBm);
         HUMIDITY_NOISE.SetFractalOctaves(2);
-        HUMIDITY_NOISE.SetFrequency(0.02f);
+        HUMIDITY_NOISE.SetFrequency(0.01f);
     }
 
     private final ClimateAxis axis;
@@ -111,7 +126,7 @@ public final class TerrainDiffusionClimateFunction implements DensityFunction {
 
     @Override
     public double compute(DensityFunction.FunctionContext context) {
-        return sampleAxis(context.blockX(), context.blockZ(), this.axis);
+        return sampleAxis(context.blockX(), context.blockY(), context.blockZ(), this.axis);
     }
 
     @Override
@@ -142,6 +157,10 @@ public final class TerrainDiffusionClimateFunction implements DensityFunction {
     }
 
     public static double sampleAxis(int blockX, int blockZ, ClimateAxis axis) {
+        return sampleAxis(blockX, 64, blockZ, axis);
+    }
+
+    public static double sampleAxis(int blockX, int blockY, int blockZ, ClimateAxis axis) {
         if (axis == ClimateAxis.EROSION) {
             return Math.max(-1.0, Math.min(1.0, EROSION_NOISE.GetNoise(blockX, blockZ)));
         }
@@ -175,13 +194,23 @@ public final class TerrainDiffusionClimateFunction implements DensityFunction {
             elev = data.elevationMeters[localZ][localX];
         }
 
+        // Minecraft height lapse rate: cools down significantly on mountains (Y > 80)
+        // At Y=140: -0.21 (grove / snowy slopes); at Y=200: -0.42 (peaks / snow)
+        int effectiveY = Math.max(blockY, (int) Math.round(elev + 64));
+        float heightCooling = effectiveY > 80 ? (effectiveY - 80) * 0.0035f : 0.0f;
+
         double value = 0.0;
         switch (axis) {
             case TEMPERATURE:
-                value = remap(temp, TEMP_C, TEMP_PARAM) + (TEMP_NOISE.GetNoise(blockX, blockZ) * 0.15f);
+                value = remap(temp, TEMP_C, TEMP_PARAM)
+                        + (REGIONAL_TEMP_NOISE.GetNoise(blockX, blockZ) * 0.45f)
+                        + (TEMP_NOISE.GetNoise(blockX, blockZ) * 0.10f)
+                        - heightCooling;
                 break;
             case HUMIDITY:
-                value = remap(precip, PRECIP_MM, HUMIDITY_PARAM) + (HUMIDITY_NOISE.GetNoise(blockX, blockZ) * 0.15f);
+                value = remap(precip, PRECIP_MM, HUMIDITY_PARAM)
+                        + (REGIONAL_HUMIDITY_NOISE.GetNoise(blockX, blockZ) * 0.45f)
+                        + (HUMIDITY_NOISE.GetNoise(blockX, blockZ) * 0.10f);
                 break;
             case CONTINENTALNESS:
                 value = remap(elev, ELEV_M, CONTINENT_PARAM);
