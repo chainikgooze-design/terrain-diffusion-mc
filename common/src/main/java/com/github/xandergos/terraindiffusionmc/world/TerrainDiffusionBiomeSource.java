@@ -64,10 +64,7 @@ public class TerrainDiffusionBiomeSource extends BiomeSource {
 
     @Override
     public Holder<Biome> getNoiseBiome(int x, int y, int z, Climate.Sampler noise) {
-        // Delegate the block-to-biome decision to the vanilla MultiNoiseBiomeSource,
-        // but inject our own AI climate sampler (the vanilla sampler is not connected
-        // to AI terrain data).
-        return this.delegate.getNoiseBiome(x, y, z, sampler);
+        return this.delegate.getNoiseBiome(x, y, z, noise != null ? noise : sampler);
     }
 
     @Override
@@ -78,7 +75,7 @@ public class TerrainDiffusionBiomeSource extends BiomeSource {
                                                             Climate.Sampler noiseSampler,
                                                             LevelReader world) {
         return this.delegate.findClosestBiome3d(origin, radius, horizontalBlockCheckInterval,
-                verticalBlockCheckInterval, predicate, sampler, world);
+                verticalBlockCheckInterval, predicate, noiseSampler != null ? noiseSampler : sampler, world);
     }
 
     @Override
@@ -88,6 +85,6 @@ public class TerrainDiffusionBiomeSource extends BiomeSource {
                                                              RandomSource random, boolean bl,
                                                              Climate.Sampler noiseSampler) {
         return this.delegate.findBiomeHorizontal(x, y, z, radius, blockCheckInterval,
-                predicate, random, bl, sampler);
+                predicate, random, bl, noiseSampler != null ? noiseSampler : sampler);
     }
 }

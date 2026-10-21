@@ -24,12 +24,27 @@
     "fluid_level_floodedness": 0,
     "fluid_level_spread": 0,
     "lava": 0,
-    "temperature": 0,
-    "vegetation": 0,
-    "continents": 0,
-    "erosion": 0,
+    "temperature": {
+      "type": "terrain-diffusion-mc:climate",
+      "axis": "temperature"
+    },
+    "vegetation": {
+      "type": "terrain-diffusion-mc:climate",
+      "axis": "vegetation"
+    },
+    "continents": {
+      "type": "terrain-diffusion-mc:climate",
+      "axis": "continents"
+    },
+    "erosion": {
+      "type": "terrain-diffusion-mc:climate",
+      "axis": "erosion"
+    },
     "depth": 0,
-    "ridges": 0,
+    "ridges": {
+      "type": "terrain-diffusion-mc:climate",
+      "axis": "ridges"
+    },
     "initial_density_without_jaggedness": {
       "type": "terrain-diffusion-mc:terrain_diffusion"
     },
