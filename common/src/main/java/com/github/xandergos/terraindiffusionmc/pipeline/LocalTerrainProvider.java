@@ -294,8 +294,8 @@ public final class LocalTerrainProvider {
 
         double fz = (double) blockZ / blocksPerCoarse - Math.floor((double) blockZ / blocksPerCoarse);
         double fx = (double) blockX / blocksPerCoarse - Math.floor((double) blockX / blocksPerCoarse);
-        int ci = Math.floorDiv(blockZ, blocksPerCoarse);
-        int cj = Math.floorDiv(blockX, blocksPerCoarse);
+        int ci = Math.floorDiv(blockZ, blocksPerCoarse); // Row index (Z)
+        int cj = Math.floorDiv(blockX, blocksPerCoarse); // Column index (X)
         int r0 = Math.max(0, Math.min(grid.rows - 2, ci - grid.ci0));
         int c0 = Math.max(0, Math.min(grid.cols - 2, cj - grid.cj0));
 
@@ -305,21 +305,22 @@ public final class LocalTerrainProvider {
                 bilerp(grid.precipitation,   r0, c0, fz, fx));
     }
 
-    private CoarseGrid coarseGridForTile(int blockI, int blockJ) {
+    private CoarseGrid coarseGridForTile(int blockX, int blockZ) {
         int scale = WorldScaleManager.getCurrentScale();
         int tileSize = TerrainDiffusionConfig.tileSize();
         int shift = Integer.numberOfTrailingZeros(tileSize);
-        int i1 = (blockI >> shift) << shift;
-        int j1 = (blockJ >> shift) << shift;
-        int i2 = i1 + tileSize;
-        int j2 = j1 + tileSize;
+        int x1 = (blockX >> shift) << shift;
+        int z1 = (blockZ >> shift) << shift;
+        int x2 = x1 + tileSize;
+        int z2 = z1 + tileSize;
 
         int blocksPerCoarse = COARSE_TO_NATIVE * scale;
         // 1-pixel border on each side so bilinear taps are always inside the grid.
-        int ci0 = Math.floorDiv(i1, blocksPerCoarse) - 1;
-        int cj0 = Math.floorDiv(j1, blocksPerCoarse) - 1;
-        int ci1 = -Math.floorDiv(-i2, blocksPerCoarse) + 1;
-        int cj1 = -Math.floorDiv(-j2, blocksPerCoarse) + 1;
+        // ci0/ci1 correspond to Z (rows), cj0/cj1 correspond to X (columns).
+        int ci0 = Math.floorDiv(z1, blocksPerCoarse) - 1;
+        int cj0 = Math.floorDiv(x1, blocksPerCoarse) - 1;
+        int ci1 = -Math.floorDiv(-z2, blocksPerCoarse) + 1;
+        int cj1 = -Math.floorDiv(-x2, blocksPerCoarse) + 1;
 
         CacheKey key = new CacheKey(ci0, cj0, ci1, cj1);
         CoarseGrid cached = COARSE_CACHE.get(key);
