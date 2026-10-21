@@ -9,11 +9,13 @@ import com.github.xandergos.terraindiffusionmc.pipeline.PipelineModels;
 import com.github.xandergos.terraindiffusionmc.world.TerrainDiffusionBiomeSource;
 import com.github.xandergos.terraindiffusionmc.world.TerrainDiffusionClimateFunction;
 import com.github.xandergos.terraindiffusionmc.world.TerrainDiffusionDensityFunction;
+import com.github.xandergos.terraindiffusionmc.world.VanillaOverworldSurfaceRuleSource;
 import com.github.xandergos.terraindiffusionmc.world.WorldScaleManager;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -23,6 +25,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.BiomeSource;
 import net.minecraft.world.level.levelgen.DensityFunction;
+import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
+import net.minecraft.world.level.levelgen.SurfaceRules;
 import com.mojang.serialization.MapCodec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +41,7 @@ public final class TerrainDiffusionLifecycle {
     private static final Logger LOG = LoggerFactory.getLogger(TerrainDiffusionLifecycle.class);
     public static final ResourceLocation TERRAIN_DIFFUSION_ID = ResourceLocation.fromNamespaceAndPath(MOD_ID, "terrain_diffusion");
     public static final ResourceLocation CLIMATE_ID = ResourceLocation.fromNamespaceAndPath(MOD_ID, "climate");
+    public static final ResourceLocation VANILLA_OVERWORLD_RULE_ID = ResourceLocation.fromNamespaceAndPath(MOD_ID, "vanilla_overworld");
     private static boolean initialized;
 
     private TerrainDiffusionLifecycle() {
@@ -79,6 +84,13 @@ public final class TerrainDiffusionLifecycle {
         registrar.register(CLIMATE_ID, TerrainDiffusionClimateFunction.CODEC);
     }
 
+    /**
+     * Registers custom surface rule (material rule) codecs through the active loader's registry hook.
+     */
+    public static void registerMaterialRuleCodecs(CodecRegistrar<MapCodec<? extends SurfaceRules.RuleSource>> registrar) {
+        registrar.register(VANILLA_OVERWORLD_RULE_ID, VanillaOverworldSurfaceRuleSource.CODEC);
+    }
+
     @FunctionalInterface
     public interface CodecRegistrar<T> {
         void register(ResourceLocation id, T value);
@@ -96,6 +108,9 @@ public final class TerrainDiffusionLifecycle {
         } catch (Throwable t) {
             LOG.error("Failed to initialize dynamic biome classifier", t);
         }
+        server.registryAccess().lookup(Registries.NOISE_SETTINGS).ifPresent(lookup ->
+                lookup.get(NoiseGeneratorSettings.OVERWORLD).ifPresent(holder ->
+                        VanillaOverworldSurfaceRuleSource.setOverworldDelegate(holder.value().surfaceRule())));
     }
 
     /**
@@ -105,6 +120,9 @@ public final class TerrainDiffusionLifecycle {
         if (world.dimension() == Level.OVERWORLD) {
             WorldScaleManager.initializeForWorld(world);
             LocalTerrainProvider.init(world.getSeed());
+            world.registryAccess().lookup(Registries.NOISE_SETTINGS).ifPresent(lookup ->
+                    lookup.get(NoiseGeneratorSettings.OVERWORLD).ifPresent(holder ->
+                            VanillaOverworldSurfaceRuleSource.setOverworldDelegate(holder.value().surfaceRule())));
         }
     }
 

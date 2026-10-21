@@ -19,6 +19,7 @@ public class TerrainDiffusionMc implements ModInitializer {
         LOG.info("Initializing terrain-diffusion-mc");
         TerrainDiffusionLifecycle.registerBiomeSourceCodecs((id, codec) -> Registry.register(BuiltInRegistries.BIOME_SOURCE, id, codec));
         TerrainDiffusionLifecycle.registerDensityFunctionCodecs((id, codec) -> Registry.register(BuiltInRegistries.DENSITY_FUNCTION_TYPE, id, codec));
+        TerrainDiffusionLifecycle.registerMaterialRuleCodecs((id, codec) -> Registry.register(BuiltInRegistries.MATERIAL_RULE, id, codec));
         TerrainDiffusionLifecycle.bootstrap(FabricLoader.getInstance().getConfigDir(), FabricLoader.getInstance().getGameDir());
 
         // SERVER_STARTING fires after the dynamic registries are populated, which is when

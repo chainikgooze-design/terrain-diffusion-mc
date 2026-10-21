@@ -37,6 +37,8 @@ public class TerrainDiffusionMc {
                 TerrainDiffusionLifecycle.registerBiomeSourceCodecs(helper::register));
         event.register(Registries.DENSITY_FUNCTION_TYPE, helper ->
                 TerrainDiffusionLifecycle.registerDensityFunctionCodecs(helper::register));
+        event.register(Registries.MATERIAL_RULE, helper ->
+                TerrainDiffusionLifecycle.registerMaterialRuleCodecs(helper::register));
     }
 
     private void onServerStarting(ServerStartingEvent event) {
