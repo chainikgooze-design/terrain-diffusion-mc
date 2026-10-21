@@ -64,7 +64,7 @@ public class TerrainDiffusionBiomeSource extends BiomeSource {
 
     @Override
     public Holder<Biome> getNoiseBiome(int x, int y, int z, Climate.Sampler noise) {
-        return this.delegate.getNoiseBiome(x, y, z, noise != null ? noise : sampler);
+        return this.delegate.getNoiseBiome(x, y, z, this.sampler);
     }
 
     @Override
@@ -75,7 +75,7 @@ public class TerrainDiffusionBiomeSource extends BiomeSource {
                                                             Climate.Sampler noiseSampler,
                                                             LevelReader world) {
         return this.delegate.findClosestBiome3d(origin, radius, horizontalBlockCheckInterval,
-                verticalBlockCheckInterval, predicate, noiseSampler != null ? noiseSampler : sampler, world);
+                verticalBlockCheckInterval, predicate, this.sampler, world);
     }
 
     @Override
@@ -85,6 +85,6 @@ public class TerrainDiffusionBiomeSource extends BiomeSource {
                                                              RandomSource random, boolean bl,
                                                              Climate.Sampler noiseSampler) {
         return this.delegate.findBiomeHorizontal(x, y, z, radius, blockCheckInterval,
-                predicate, random, bl, noiseSampler != null ? noiseSampler : sampler);
+                predicate, random, bl, this.sampler);
     }
 }
