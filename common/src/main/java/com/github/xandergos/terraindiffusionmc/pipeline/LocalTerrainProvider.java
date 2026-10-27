@@ -255,36 +255,13 @@ public final class LocalTerrainProvider {
     }
 
     /**
-     * Bulletproof detector for whether the calling thread is only probing for
-     * structures/spawn (a macro query) rather than physically generating chunk
-     * blocks. Actual chunk generation phases ({@code createBiomes},
-     * {@code fillBiomesFromNoise}, {@code buildSurface}, {@code fillArray},
-     * {@code applyCarvers}, {@code buildFeatures}) must NEVER be treated as macro
-     * queries: they require the high-res heightmap so chunk borders stay perfectly
-     * deterministic. Structure/placement probes ({@code findSpawnBlockPos},
-     * {@code locate}, etc.) are cheap one-off lookups that may use the coarse map.
+     * Fast, zero-overhead detector for whether the calling thread is inside a macro query
+     * (structure search, /locate, spawn placement). Backed by {@link MacroQueryScope}.
+     * Physical chunk generation phases never run inside a MacroQueryScope, guaranteeing
+     * that chunk blocks and biomes always use full high-resolution data.
      */
     public static boolean isMacroQuery() {
-        StackTraceElement[] stack = Thread.currentThread().getStackTrace();
-        boolean hasChunkGen = false;
-        boolean hasStructure = false;
-        for (int i = 2; i < Math.min(stack.length, 25); i++) {
-            String mth = stack[i].getMethodName();
-            String cls = stack[i].getClassName();
-
-            if (mth.equals("createBiomes") || mth.equals("fillBiomesFromNoise") ||
-                mth.equals("buildSurface") || mth.equals("fillArray") ||
-                mth.equals("applyCarvers") || mth.equals("buildFeatures")) {
-                hasChunkGen = true;
-            }
-            if (cls.contains("Structure") || cls.contains("Placement") ||
-                mth.equals("findSpawnBlockPos") || mth.equals("locate")) {
-                hasStructure = true;
-            }
-        }
-        // Strict rule: If it's a physical chunk generation phase, NEVER macro-query.
-        if (hasChunkGen) return false;
-        return hasStructure;
+        return MacroQueryScope.isActive();
     }
 
     private CoarseSample sampleCoarse(int blockX, int blockZ) {

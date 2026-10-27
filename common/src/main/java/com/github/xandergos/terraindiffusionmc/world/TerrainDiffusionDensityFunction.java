@@ -16,14 +16,44 @@ public class TerrainDiffusionDensityFunction implements DensityFunction {
     public static final TerrainDiffusionDensityFunction INSTANCE =
             new TerrainDiffusionDensityFunction();
 
+    public static int applyRiverCarving(int x, int z, int targetHeight) {
+        // Rivers only carve in lowlands, plains, and valleys (targetHeight <= 85)
+        if (targetHeight <= 63) {
+            return targetHeight; // Already at or below sea level
+        }
+        if (targetHeight > 85) {
+            return targetHeight; // High mountains - no rivers
+        }
+
+        float weird = TerrainDiffusionClimateFunction.getWeirdnessNoise(x, z);
+        float riverHalfWidth = 0.055f;
+        float absWeird = Math.abs(weird);
+        if (absWeird < riverHalfWidth) {
+            float t = 1.0f - (absWeird / riverHalfWidth);
+            // Smoothstep curve for natural riverbed cross-section
+            float w = t * t * (3.0f - 2.0f * t);
+            // Smoothly fade out carving depth between Y=72 and Y=85
+            if (targetHeight > 72) {
+                float fade = 1.0f - ((targetHeight - 72f) / 13.0f);
+                w *= fade;
+            }
+            // Carve down towards Y=58 (5 blocks of water below sea level 63)
+            return (int) Math.round(targetHeight * (1.0f - w) + 58.0f * w);
+        }
+        return targetHeight;
+    }
+
     @Override
     public double compute(DensityFunction.FunctionContext pos) {
         int x = pos.blockX();
         int z = pos.blockZ();
         int y = pos.blockY();
 
+        // Macro queries (/locate structure, spawn search) read the coarse map.
+        // Chunk generation phases never run under MacroQueryScope, guaranteeing High-Res.
         if (LocalTerrainProvider.isMacroQuery()) {
-            return LocalTerrainProvider.getCoarseHeight(x, z) - y;
+            int coarseHeight = LocalTerrainProvider.getCoarseHeight(x, z);
+            return applyRiverCarving(x, z, coarseHeight) - y;
         }
 
         int tileSize = TerrainDiffusionConfig.tileSize();
@@ -33,13 +63,13 @@ public class TerrainDiffusionDensityFunction implements DensityFunction {
         int blockEndX = blockStartX + tileSize;
         int blockEndZ = blockStartZ + tileSize;
 
-        // FORCE high-res generation to ensure deterministic chunk borders
         HeightmapData data = LocalTerrainProvider.getInstance()
                 .fetchHeightmap(blockStartZ, blockStartX, blockEndZ, blockEndX);
 
         int localX = Math.max(0, Math.min(data.width - 1, x - blockStartX));
         int localZ = Math.max(0, Math.min(data.height - 1, z - blockStartZ));
         int targetHeight = HeightConverter.convertToMinecraftHeight(data.heightmap[localZ][localX]);
+        targetHeight = applyRiverCarving(x, z, targetHeight);
 
         return targetHeight - y;
     }
@@ -99,6 +129,7 @@ public class TerrainDiffusionDensityFunction implements DensityFunction {
 
             int targetHeight = HeightConverter
                 .convertToMinecraftHeight(data.heightmap[localZ][localX]);
+            targetHeight = applyRiverCarving(x, z, targetHeight);
             densities[i] = targetHeight - y;
         }
     }

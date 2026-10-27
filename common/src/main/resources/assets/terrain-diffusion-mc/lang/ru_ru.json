@@ -1,0 +1,8 @@
+{
+  "generator.terrain-diffusion-mc.terrain_diffusion": "Terrain Diffusion: Data-Driven",
+  "terrain-diffusion-mc.world_settings.title": "Настройки генерации",
+  "terrain-diffusion-mc.world_settings.open_button": "Настройки Terrain Diffusion",
+  "terrain-diffusion-mc.world_settings.scale": "Масштаб мира (Scale)",
+  "terrain-diffusion-mc.world_settings.world_scale_description": "Задать масштаб рельефа для этого мира (1-6).",
+  "terrain-diffusion-mc.world_settings.scale_error": "Масштаб должен быть целым числом от 1 до 6"
+}

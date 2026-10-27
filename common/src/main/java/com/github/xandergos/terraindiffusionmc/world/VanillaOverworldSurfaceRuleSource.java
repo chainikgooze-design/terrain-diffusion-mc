@@ -63,6 +63,15 @@ public final class VanillaOverworldSurfaceRuleSource implements SurfaceRules.Rul
         if (delegate != null) {
             return delegate.apply(context);
         }
-        return (x, y, z) -> null;
+        // Fallback proxy: in case apply(context) was called during initial chunk-generator
+        // setup before the server level registered the overworld delegate.
+        return (x, y, z) -> {
+            SurfaceRules.RuleSource d = getOverworldDelegate();
+            if (d != null) {
+                SurfaceRules.SurfaceRule rule = d.apply(context);
+                return rule != null ? rule.tryApply(x, y, z) : null;
+            }
+            return null;
+        };
     }
 }

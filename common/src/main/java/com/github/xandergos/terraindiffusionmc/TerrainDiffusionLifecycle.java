@@ -120,6 +120,7 @@ public final class TerrainDiffusionLifecycle {
         if (world.dimension() == Level.OVERWORLD) {
             WorldScaleManager.initializeForWorld(world);
             LocalTerrainProvider.init(world.getSeed());
+            TerrainDiffusionClimateFunction.setSeed(world.getSeed());
             world.registryAccess().lookup(Registries.NOISE_SETTINGS).ifPresent(lookup ->
                     lookup.get(NoiseGeneratorSettings.OVERWORLD).ifPresent(holder ->
                             VanillaOverworldSurfaceRuleSource.setOverworldDelegate(holder.value().surfaceRule())));

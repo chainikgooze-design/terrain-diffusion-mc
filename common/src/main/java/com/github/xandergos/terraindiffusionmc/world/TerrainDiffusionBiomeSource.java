@@ -74,8 +74,10 @@ public class TerrainDiffusionBiomeSource extends BiomeSource {
                                                             Predicate<Holder<Biome>> predicate,
                                                             Climate.Sampler noiseSampler,
                                                             LevelReader world) {
-        return this.delegate.findClosestBiome3d(origin, radius, horizontalBlockCheckInterval,
-                verticalBlockCheckInterval, predicate, this.sampler, world);
+        try (var ignored = com.github.xandergos.terraindiffusionmc.pipeline.MacroQueryScope.open()) {
+            return this.delegate.findClosestBiome3d(origin, radius, horizontalBlockCheckInterval,
+                    verticalBlockCheckInterval, predicate, this.sampler, world);
+        }
     }
 
     @Override
@@ -84,7 +86,9 @@ public class TerrainDiffusionBiomeSource extends BiomeSource {
                                                              Predicate<Holder<Biome>> predicate,
                                                              RandomSource random, boolean bl,
                                                              Climate.Sampler noiseSampler) {
-        return this.delegate.findBiomeHorizontal(x, y, z, radius, blockCheckInterval,
-                predicate, random, bl, this.sampler);
+        try (var ignored = com.github.xandergos.terraindiffusionmc.pipeline.MacroQueryScope.open()) {
+            return this.delegate.findBiomeHorizontal(x, y, z, radius, blockCheckInterval,
+                    predicate, random, bl, this.sampler);
+        }
     }
 }

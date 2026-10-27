@@ -69,8 +69,8 @@ public final class TerrainDiffusionClimateFunction implements DensityFunction {
     private static final float[] PRECIP_MM      = {0f, 150f, 400f, 700f, 1100f, 1600f, 2200f, 3000f};
     private static final float[] HUMIDITY_PARAM = {-1f, -0.6f, -0.2f, 0.1f, 0.4f, 0.7f, 0.9f, 1f};
 
-    private static final float[] ELEV_M          = {-1000f, -250f, -50f,   -5f,     0f,      1f,   50f,  300f, 1500f, 4000f, 9000f};
-    private static final float[] CONTINENT_PARAM = {-1.00f, -0.60f, -0.35f, -0.20f, -0.15f,  0.05f, 0.20f, 0.40f, 0.80f, 0.95f, 1.00f};
+    private static final float[] ELEV_M          = {-1000f, -100f,  -15f,   -2f,     0f,     4f,     8f,    25f,   100f,   400f,  1500f, 4000f};
+    private static final float[] CONTINENT_PARAM = {-1.00f, -0.60f, -0.35f, -0.22f, -0.17f, -0.15f, -0.12f, -0.05f,  0.15f,  0.45f,  0.80f,  1.00f};
 
     private static final FastNoiseLite EROSION_NOISE   = new FastNoiseLite(1111);
     private static final FastNoiseLite WEIRDNESS_NOISE = new FastNoiseLite(2222);
@@ -96,12 +96,12 @@ public final class TerrainDiffusionClimateFunction implements DensityFunction {
         EROSION_NOISE.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
         EROSION_NOISE.SetFractalType(FastNoiseLite.FractalType.FBm);
         EROSION_NOISE.SetFractalOctaves(3);
-        EROSION_NOISE.SetFrequency(0.005f);
+        EROSION_NOISE.SetFrequency(0.003f);
 
         WEIRDNESS_NOISE.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
         WEIRDNESS_NOISE.SetFractalType(FastNoiseLite.FractalType.FBm);
         WEIRDNESS_NOISE.SetFractalOctaves(3);
-        WEIRDNESS_NOISE.SetFrequency(0.004f);
+        WEIRDNESS_NOISE.SetFrequency(0.003f);
 
         TEMP_NOISE.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
         TEMP_NOISE.SetFractalType(FastNoiseLite.FractalType.FBm);
@@ -112,6 +112,19 @@ public final class TerrainDiffusionClimateFunction implements DensityFunction {
         HUMIDITY_NOISE.SetFractalType(FastNoiseLite.FractalType.FBm);
         HUMIDITY_NOISE.SetFractalOctaves(2);
         HUMIDITY_NOISE.SetFrequency(0.01f);
+    }
+
+    public static void setSeed(long seed) {
+        REGIONAL_TEMP_NOISE.SetSeed((int) (seed ^ 5555L));
+        REGIONAL_HUMIDITY_NOISE.SetSeed((int) (seed ^ 6666L));
+        EROSION_NOISE.SetSeed((int) (seed ^ 1111L));
+        WEIRDNESS_NOISE.SetSeed((int) (seed ^ 2222L));
+        TEMP_NOISE.SetSeed((int) (seed ^ 3333L));
+        HUMIDITY_NOISE.SetSeed((int) (seed ^ 4444L));
+    }
+
+    public static float getWeirdnessNoise(int blockX, int blockZ) {
+        return WEIRDNESS_NOISE.GetNoise(blockX, blockZ);
     }
 
     private final ClimateAxis axis;
@@ -164,25 +177,32 @@ public final class TerrainDiffusionClimateFunction implements DensityFunction {
         if (axis == ClimateAxis.EROSION) {
             return Math.max(-1.0, Math.min(1.0, EROSION_NOISE.GetNoise(blockX, blockZ)));
         }
-        if (axis == ClimateAxis.WEIRDNESS) {
-            return Math.max(-1.0, Math.min(1.0, WEIRDNESS_NOISE.GetNoise(blockX, blockZ)));
-        }
 
         float temp, precip, elev;
 
-        if (LocalTerrainProvider.isMacroQuery()) {
-            LocalTerrainProvider.CoarseSample sample = LocalTerrainProvider.getCoarseSample(blockX, blockZ);
-            temp = sample.temperature();
-            precip = sample.precipitation();
-            elev = sample.elevationMeters();
-        } else {
-            int tileSize = TerrainDiffusionConfig.tileSize();
-            int tileShift = Integer.numberOfTrailingZeros(tileSize);
-            int blockStartX = (blockX >> tileShift) << tileShift;
-            int blockStartZ = (blockZ >> tileShift) << tileShift;
-            int blockEndX = blockStartX + tileSize;
-            int blockEndZ = blockStartZ + tileSize;
+        int tileSize = TerrainDiffusionConfig.tileSize();
+        int tileShift = Integer.numberOfTrailingZeros(tileSize);
+        int blockStartX = (blockX >> tileShift) << tileShift;
+        int blockStartZ = (blockZ >> tileShift) << tileShift;
+        int blockEndX = blockStartX + tileSize;
+        int blockEndZ = blockStartZ + tileSize;
 
+        if (LocalTerrainProvider.isMacroQuery()) {
+            LocalTerrainProvider.HeightmapData cachedData = LocalTerrainProvider.getInstance()
+                    .getIfCached(blockStartZ, blockStartX, blockEndZ, blockEndX);
+            if (cachedData != null) {
+                int localX = Math.max(0, Math.min(cachedData.width - 1, blockX - blockStartX));
+                int localZ = Math.max(0, Math.min(cachedData.height - 1, blockZ - blockStartZ));
+                temp = cachedData.temperature[localZ][localX];
+                precip = cachedData.precipitation[localZ][localX];
+                elev = cachedData.elevationMeters[localZ][localX];
+            } else {
+                LocalTerrainProvider.CoarseSample sample = LocalTerrainProvider.getCoarseSample(blockX, blockZ);
+                temp = sample.temperature();
+                precip = sample.precipitation();
+                elev = sample.elevationMeters();
+            }
+        } else {
             // FORCE high-res data for perfectly synced chunk borders
             LocalTerrainProvider.HeightmapData data = LocalTerrainProvider.getInstance()
                     .fetchHeightmap(blockStartZ, blockStartX, blockEndZ, blockEndX);
@@ -208,6 +228,18 @@ public final class TerrainDiffusionClimateFunction implements DensityFunction {
 
         double value = 0.0;
         switch (axis) {
+            case WEIRDNESS:
+                float weird = WEIRDNESS_NOISE.GetNoise(blockX, blockZ);
+                // In mountains and high plateaus (elev > 22m, Y > 85), push weirdness out of the
+                // vanilla river corridor [-0.10, 0.10] so rivers only spawn in lowlands, plains,
+                // and valleys where they naturally belong and have water.
+                if (elev > 22.0f) {
+                    if (weird >= -0.10f && weird <= 0.10f) {
+                        weird = (weird >= 0f) ? (0.10f + (weird / 0.10f) * 0.15f) : (-0.10f + (weird / 0.10f) * 0.15f);
+                    }
+                }
+                value = weird;
+                break;
             case TEMPERATURE:
                 value = remap(temp, TEMP_C, TEMP_PARAM)
                         + (REGIONAL_TEMP_NOISE.GetNoise(blockX, blockZ) * 0.45f)

@@ -32,6 +32,12 @@ public final class SpawnSelector {
      * configured maximum search region.
      */
     public static BlockPos findSpawnBlockPos() {
+        try (var ignored = MacroQueryScope.open()) {
+            return findSpawnBlockPosInternal();
+        }
+    }
+
+    private static BlockPos findSpawnBlockPosInternal() {
         int initialSize = TerrainDiffusionConfig.spawnSearchInitialSize();
         int maxSize = TerrainDiffusionConfig.spawnSearchMaxSize();
         int scale = WorldScaleManager.getCurrentScale();
