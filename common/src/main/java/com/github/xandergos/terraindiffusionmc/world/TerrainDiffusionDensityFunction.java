@@ -146,7 +146,7 @@ public class TerrainDiffusionDensityFunction implements DensityFunction {
 
     @Override
     public double maxValue() {
-        return 1024;
+        return 2100;
     }
 
     @Override

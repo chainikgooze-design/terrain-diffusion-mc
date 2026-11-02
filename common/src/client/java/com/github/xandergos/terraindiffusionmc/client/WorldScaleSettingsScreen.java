@@ -10,13 +10,17 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderGetter;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
+import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.WorldDimensions;
 
 import java.util.HashMap;
@@ -117,7 +121,7 @@ public final class WorldScaleSettingsScreen extends Screen {
     }
 
     /**
-     * Applies a pre-registered dimension type variant for the chosen scale.
+     * Applies a pre-registered dimension type variant and noise settings for the chosen scale.
      */
     private void applyWorldHeightForScale(int selectedScale) {
         if (!(parentScreen instanceof CreateWorldScreen createWorldScreen)) {
@@ -125,8 +129,8 @@ public final class WorldScaleSettingsScreen extends Screen {
         }
 
         createWorldScreen.getUiState().updateDimensions((registryManager, selectedDimensions) -> {
-            WorldDimensions updatedDimensions = updateOverworldDimensionType(
-                    registryManager.lookupOrThrow(Registries.DIMENSION_TYPE),
+            WorldDimensions updatedDimensions = updateOverworldSettings(
+                    registryManager,
                     selectedDimensions,
                     selectedScale);
             return updatedDimensions == null ? selectedDimensions : updatedDimensions;
@@ -134,10 +138,10 @@ public final class WorldScaleSettingsScreen extends Screen {
     }
 
     /**
-     * Replaces only the overworld dimension type entry with the scale-specific pre-registered one.
+     * Replaces the overworld dimension type and noise settings with the scale-specific pre-registered ones.
      */
-    private WorldDimensions updateOverworldDimensionType(
-            HolderGetter<DimensionType> dimensionTypeRegistry,
+    private WorldDimensions updateOverworldSettings(
+            RegistryAccess registryManager,
             WorldDimensions selectedDimensions,
             int selectedScale
     ) {
@@ -146,6 +150,7 @@ public final class WorldScaleSettingsScreen extends Screen {
             return null;
         }
 
+        HolderGetter<DimensionType> dimensionTypeRegistry = registryManager.lookupOrThrow(Registries.DIMENSION_TYPE);
         ResourceKey<DimensionType> dimensionTypeKey = ResourceKey.create(
                 Registries.DIMENSION_TYPE,
                 ResourceLocation.fromNamespaceAndPath(MOD_ID, "terrain_diffusion_scale_" + selectedScale));
@@ -154,9 +159,23 @@ public final class WorldScaleSettingsScreen extends Screen {
             return null;
         }
 
+        ChunkGenerator updatedGenerator = overworldOptions.generator();
+        if (updatedGenerator instanceof NoiseBasedChunkGenerator noiseGen) {
+            HolderGetter<NoiseGeneratorSettings> noiseSettingsRegistry =
+                    registryManager.lookupOrThrow(Registries.NOISE_SETTINGS);
+            ResourceKey<NoiseGeneratorSettings> noiseSettingsKey = ResourceKey.create(
+                    Registries.NOISE_SETTINGS,
+                    ResourceLocation.fromNamespaceAndPath(MOD_ID, "terrain_diffusion_scale_" + selectedScale));
+            Holder.Reference<NoiseGeneratorSettings> selectedNoiseSettingsEntry =
+                    noiseSettingsRegistry.get(noiseSettingsKey).orElse(null);
+            if (selectedNoiseSettingsEntry != null) {
+                updatedGenerator = new NoiseBasedChunkGenerator(noiseGen.getBiomeSource(), selectedNoiseSettingsEntry);
+            }
+        }
+
         LevelStem updatedOverworldOptions = new LevelStem(
                 selectedDimensionTypeEntry,
-                overworldOptions.generator()
+                updatedGenerator
         );
 
         Map<ResourceKey<LevelStem>, LevelStem> updatedDimensionMap =

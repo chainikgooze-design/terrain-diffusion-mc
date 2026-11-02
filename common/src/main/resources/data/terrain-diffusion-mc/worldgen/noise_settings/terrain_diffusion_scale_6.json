@@ -1,0 +1,65 @@
+{
+  "sea_level": 63,
+  "disable_mob_generation": false,
+  "aquifers_enabled": false,
+  "ore_veins_enabled": false,
+  "legacy_random_source": false,
+  "default_block": {
+    "Name": "minecraft:stone"
+  },
+  "default_fluid": {
+    "Name": "minecraft:water",
+    "Properties": {
+      "level": "0"
+    }
+  },
+  "noise": {
+    "min_y": -64,
+    "height": 2032,
+    "size_horizontal": 1,
+    "size_vertical": 2
+  },
+  "noise_router": {
+    "barrier": 0,
+    "fluid_level_floodedness": 0,
+    "fluid_level_spread": 0,
+    "lava": 0,
+    "temperature": {
+      "type": "terrain-diffusion-mc:climate",
+      "axis": "temperature"
+    },
+    "vegetation": {
+      "type": "terrain-diffusion-mc:climate",
+      "axis": "vegetation"
+    },
+    "continents": {
+      "type": "terrain-diffusion-mc:climate",
+      "axis": "continents"
+    },
+    "erosion": {
+      "type": "terrain-diffusion-mc:climate",
+      "axis": "erosion"
+    },
+    "depth": 0,
+    "ridges": {
+      "type": "terrain-diffusion-mc:climate",
+      "axis": "ridges"
+    },
+    "initial_density_without_jaggedness": {
+      "type": "terrain-diffusion-mc:terrain_diffusion"
+    },
+    "preliminary_surface_level": {
+      "type": "terrain-diffusion-mc:terrain_diffusion"
+    },
+    "final_density": {
+      "type": "terrain-diffusion-mc:terrain_diffusion"
+    },
+    "vein_toggle": 0,
+    "vein_ridged": 0,
+    "vein_gap": 0
+  },
+  "spawn_target": [],
+  "surface_rule": {
+    "type": "terrain-diffusion-mc:vanilla_overworld"
+  }
+}
